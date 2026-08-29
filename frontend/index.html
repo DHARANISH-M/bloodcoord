@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Blood Availability & Coordination</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+        <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              canvas: 'var(--canvas)',
+              'canvas-soft': 'var(--canvas-soft)',
+              'surface-card': 'var(--surface-card)',
+              hairline: 'var(--hairline)',
+              ink: 'var(--ink)',
+              body: 'var(--body)',
+              muted: 'var(--muted)',
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
