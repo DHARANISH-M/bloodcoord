@@ -3,6 +3,13 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/AuthLayout'
 
+const DEMO_ACCOUNTS = [
+  { role: 'Admin', name: 'National eRaktKosh Admin', email: 'admin@eraktkosh.gov.in', pass: 'admin123', icon: '⚡' },
+  { role: 'Blood Bank', name: 'Indian Red Cross HQ', email: 'redcross@blood.org', pass: 'bank123', icon: '🩸' },
+  { role: 'Hospital', name: 'AIIMS New Delhi', email: 'aiims.delhi@blood.org', pass: 'hosp123', icon: '🏥' },
+  { role: 'Donor', name: 'Rahul Sharma (O-)', email: 'rahul.sharma@gmail.com', pass: 'donor123', icon: '👤' },
+]
+
 export default function Login(){
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
@@ -16,17 +23,26 @@ export default function Login(){
   useEffect(() => {
     const qEmail = searchParams.get('email')
     const qPass = searchParams.get('password')
-    if (qEmail && qPass) {
+    if (qEmail) {
       setEmail(qEmail)
-      setPassword(qPass)
-      
-      // Auto login after a tiny delay for visual feedback
-      const timer = setTimeout(() => {
-        autoSubmit(qEmail, qPass)
-      }, 300)
-      return () => clearTimeout(timer)
+      if (qPass) {
+        setPassword(qPass)
+        // Auto login after a short delay for visual confirmation
+        const timer = setTimeout(() => {
+          autoSubmit(qEmail, qPass)
+        }, 300)
+        return () => clearTimeout(timer)
+      }
     }
   }, [searchParams])
+
+  const redirectUser = (role) => {
+    if (role === 'admin') navigate('/admin')
+    else if (role === 'blood_bank') navigate('/bloodbank')
+    else if (role === 'hospital') navigate('/hospital')
+    else if (role === 'donor') navigate('/donor')
+    else navigate('/dashboard')
+  }
 
   const autoSubmit = async (m, p) => {
     setIsLoading(true)
@@ -35,7 +51,7 @@ export default function Login(){
       const data = await login(m, p)
       redirectUser(data.role)
     } catch (e) {
-      setErr(e.message || 'Login failed')
+      setErr(e.message || 'Login failed. Please verify your credentials.')
     } finally {
       setIsLoading(false)
     }
@@ -43,32 +59,35 @@ export default function Login(){
 
   const submit = async (e)=>{
     e.preventDefault()
+    if (!email.trim() || !password) {
+      setErr('Please provide both email and password.')
+      return
+    }
+
     setIsLoading(true)
     setErr(null)
-    try{
-      const data = await login(email, password)
+    try {
+      const data = await login(email.trim(), password)
       redirectUser(data.role)
-    }catch(err){ 
-      setErr(err.message || 'Login failed. Please verify credentials.') 
+    } catch(err) { 
+      setErr(err.message || 'Invalid email or password. Please verify credentials.') 
     } finally {
       setIsLoading(false)
     }
   }
 
-  const redirectUser = (role) => {
-    if (role === 'admin') navigate('/admin')
-    else if (role === 'blood_bank') navigate('/bloodbank')
-    else if (role === 'hospital') navigate('/hospital')
-    else if (role === 'donor') navigate('/donor')
-    else navigate('/')
+  const selectDemoAccount = (acc) => {
+    setEmail(acc.email)
+    setPassword(acc.pass)
+    setErr(null)
   }
 
   return (
     <AuthLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 max-h-[85vh] overflow-y-auto pr-1">
         {/* Welcome Eyebrow & Branding */}
-        <div className="space-y-2">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-body block">
+        <div className="space-y-2 text-left">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#f54e00] block">
             WELCOME BACK
           </span>
           <div className="flex items-center space-x-2">
@@ -78,21 +97,24 @@ export default function Login(){
             </h1>
           </div>
           <p className="text-xs text-body leading-relaxed max-w-sm">
-            Log in to manage blood requests, track stock, and coordinate with your network.
+            Sign in to coordinate blood logistics, manage inventory, and respond to emergencies.
           </p>
         </div>
 
         {/* Error message */}
         {err && (
-          <div className="p-3.5 bg-[#f54e00]/10 border border-hairline text-[#d04200] text-xs font-semibold rounded-xl text-center">
-            ⚠️ {err}
+          <div className="p-3.5 bg-[#f54e00]/10 border border-hairline text-[#d04200] text-xs font-semibold rounded-xl text-left flex items-start space-x-2">
+            <span className="text-sm">⚠️</span>
+            <span className="flex-1">{err}</span>
           </div>
         )}
 
         {/* Form fields */}
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-1.5 text-left">
-            <label className="text-xs font-bold uppercase tracking-wider text-body">Email or Hospital ID</label>
+            <label className="text-xs font-bold uppercase tracking-wider text-body">
+              Email Address
+            </label>
             <div className="relative">
               <span className="absolute left-3.5 top-3.5 text-muted">
                 <svg className="w-4 h-4 text-body/60" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -104,7 +126,7 @@ export default function Login(){
                 value={email} 
                 onChange={e=>setEmail(e.target.value)} 
                 placeholder="e.g. contact@domain.org" 
-                className="w-full bg-canvas border border-hairline rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
+                className="w-full bg-canvas border border-hairline rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
                 required
                 disabled={isLoading}
               />
@@ -114,9 +136,9 @@ export default function Login(){
           <div className="space-y-1.5 text-left">
             <div className="flex justify-between items-center">
               <label className="text-xs font-bold uppercase tracking-wider text-body">Password</label>
-              <a href="#" className="text-[11px] text-[#f54e00] font-bold hover:underline">
-                Forgot password?
-              </a>
+              <Link to="/register" className="text-[11px] text-[#f54e00] font-bold hover:underline">
+                New user? Register
+              </Link>
             </div>
             <div className="relative">
               <span className="absolute left-3.5 top-3.5 text-muted">
@@ -129,24 +151,16 @@ export default function Login(){
                 value={password} 
                 onChange={e=>setPassword(e.target.value)} 
                 placeholder="••••••••••••" 
-                className="w-full bg-canvas border border-hairline rounded-xl pl-10 pr-10 py-2.5 text-sm font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
+                className="w-full bg-canvas border border-hairline rounded-xl pl-10 pr-10 py-2.5 text-sm font-semibold text-ink placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
                 required
                 disabled={isLoading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-3 focus:outline-none"
+                className="absolute right-3.5 top-3 focus:outline-none text-muted hover:text-ink text-sm"
               >
-                {showPassword ? (
-                  <svg className="w-4 h-4 text-body/70 hover:text-ink" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 text-body/70 hover:text-ink" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                  </svg>
-                )}
+                {showPassword ? '🙈' : '👁️'}
               </button>
             </div>
           </div>
@@ -154,7 +168,7 @@ export default function Login(){
           <button 
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 bg-[#f54e00] hover:bg-[#d04200] text-white font-bold rounded-xl shadow-none transition disabled:opacity-50 flex items-center justify-center space-x-2 text-xs tracking-widest uppercase font-sans mt-2"
+            className="w-full py-3.5 bg-[#f54e00] hover:bg-[#d04200] text-white font-bold rounded-xl shadow-sm transition disabled:opacity-50 flex items-center justify-center space-x-2 text-xs tracking-widest uppercase font-sans mt-2"
           >
             {isLoading ? (
               <span>Authenticating...</span>
@@ -164,8 +178,34 @@ export default function Login(){
           </button>
         </form>
 
+        {/* Quick Demo Login Fast Switcher */}
+        <div className="pt-3 border-t border-hairline text-left">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-body">
+              ⚡ Quick Demo Logins:
+            </span>
+            <span className="text-[9px] text-muted">Click to fill</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {DEMO_ACCOUNTS.map((acc) => (
+              <button
+                key={acc.role}
+                type="button"
+                onClick={() => selectDemoAccount(acc)}
+                className="p-2 rounded-xl border border-hairline bg-canvas hover:bg-canvas-soft transition text-left flex items-center space-x-2"
+              >
+                <span className="text-base">{acc.icon}</span>
+                <div className="overflow-hidden">
+                  <div className="text-[11px] font-bold text-ink truncate">{acc.role}</div>
+                  <div className="text-[9px] text-muted truncate">{acc.email}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Footer Link */}
-        <div className="text-center pt-4 border-t border-hairline">
+        <div className="text-center pt-2 border-t border-hairline">
           <p className="text-xs text-body">
             Don't have an account?{' '}
             <Link to="/register" className="text-[#f54e00] font-bold hover:underline ml-1">

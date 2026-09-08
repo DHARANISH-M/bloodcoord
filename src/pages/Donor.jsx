@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { mockApi } from '../utils/mockDb'
+import { dataApi } from '../utils/api'
 import Sidebar from '../components/Sidebar'
+import CompatibilityBadge from '../components/crossmatch/CompatibilityBadge'
 
 export default function Donor(){
   const { user, logout, isDarkMode, setIsDarkMode } = useAuth()
@@ -22,15 +23,15 @@ export default function Donor(){
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [requestType, setRequestType] = useState('blood_bank') // 'blood_bank' or 'hospital'
 
-  const reloadData = () => {
+  const reloadData = async () => {
     try {
-      const donors = JSON.parse(localStorage.getItem('blood_donors') || '[]')
-      const profile = donors.find(d => d.id === user.profileId || d.user_id === user.id)
+      if (!user) return
+      const profile = await dataApi.getDonorProfile(user)
       if (profile) {
         setDonorInfo(profile)
         
         // Fetch separate lists
-        const lists = mockApi.getDonorRequests(profile.id)
+        const lists = await dataApi.getDonorRequests(profile.id)
         setBankReqs(lists.bankRequests || [])
         setHospReqs(lists.hospitalRequests || [])
       }
@@ -43,36 +44,34 @@ export default function Donor(){
     reloadData()
   }, [user])
 
-  const handleToggleAvailability = (e) => {
+  const handleToggleAvailability = async (e) => {
     const checked = e.target.checked
     try {
-      mockApi.toggleDonorAvailability(donorInfo.id, checked)
+      await dataApi.toggleDonorAvailability(donorInfo.id, checked)
       setMsg({ text: `Volunteer availability flag updated: ${checked ? 'ONLINE' : 'OFFLINE'}`, type: 'success' })
-      reloadData()
+      await reloadData()
     } catch (e) {
       setMsg({ text: e.message, type: 'error' })
     }
   }
 
-  const handleRespond = (offerId, status) => {
+  const handleRespond = async (offerId, status) => {
     try {
-      mockApi.respondToOffer(offerId, status)
+      await dataApi.respondToOffer(offerId, status)
       setMsg({ text: `Request successfully marked as ${status.toUpperCase()}. Requester notified.`, type: 'success' })
-      reloadData()
+      await reloadData()
     } catch (e) {
       setMsg({ text: e.message, type: 'error' })
     }
   }
 
-  const handleCreateQuery = (e) => {
+  const handleCreateQuery = async (e) => {
     e.preventDefault()
     if (!subject.trim() || !message.trim()) {
       alert('Please fill out all fields.')
-      return
     }
-
     try {
-      mockApi.createQuery(user.id, subject, message)
+      await dataApi.createQuery(user.id, subject, message)
       setMsg({ text: 'Inquiry ticket created. Admin notified.', type: 'success' })
       setSubject('')
       setMessage('')
@@ -84,7 +83,7 @@ export default function Donor(){
   return (
     <div className="flex h-screen bg-canvas text-ink overflow-hidden font-sans">
       
-      {/* Standarized Left Navigation Sidebar */}
+      {/* Standardized Left Navigation Sidebar */}
       <Sidebar 
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -99,35 +98,29 @@ export default function Donor(){
 
       <div className="flex-1 flex flex-col overflow-hidden relative transition-colors bg-canvas">
         
-        {/* Top Header Bar */}
-        <header className="h-16 border-b border-hairline bg-surface-card flex items-center justify-between px-8 z-10 shrink-0">
+        {/* Header Bar */}
+        <header className="border-b px-8 py-5 flex justify-between items-center bg-surface-card border-hairline shrink-0">
           <div className="flex items-center space-x-3">
-            <h1 className="text-xl font-bold tracking-tight text-ink uppercase">
-              {activeTab === 'requests' ? 'Incoming Invites' :
-               activeTab === 'raise' ? 'Support Inquiry' :
-               'My Availability'}
+            <h1 className="text-base font-bold uppercase tracking-wider">
+              {activeTab === 'requests' ? 'Compatible Donation Requests' : activeTab === 'raise' ? 'Inquiry Desk' : 'Profile Settings'}
             </h1>
-            <span className="text-xs text-[#e6e5e0]">|</span>
-            <span className="text-xs font-semibold text-body tracking-wider uppercase">
-              Volunteer Donor Console
-            </span>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <div className="text-sm font-bold text-ink">{donorInfo ? donorInfo.name : 'Volunteer Donor'}</div>
-              <div className="text-[10px] text-body font-semibold uppercase tracking-wider">
-                Blood Group: <span className="text-[#f54e00] font-bold">{donorInfo?.blood_group || 'O-'}</span>
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-3">
+              <div className="h-8.5 w-8.5 bg-[#f54e00] text-white font-bold text-xs rounded-xl flex items-center justify-center">
+                {donorInfo?.blood_group || 'O+'}
               </div>
-            </div>
-            <div className="w-9 h-9 rounded-full bg-[#f54e00]/10 flex items-center justify-center font-bold text-[#f54e00] text-sm border border-[#f54e00]/25">
-              {(donorInfo?.name || 'V').charAt(0).toUpperCase()}
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-bold text-ink">{donorInfo?.name || 'Active Volunteer'}</span>
+                <span className="text-[10px] text-body">{donorInfo?.district || 'New Delhi'}, {donorInfo?.state || 'Delhi'}</span>
+              </div>
             </div>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-8 relative">
+        <main className="flex-1 overflow-y-auto p-8 relative text-left">
           
           {/* Global message banner */}
           {msg && (
@@ -139,13 +132,20 @@ export default function Donor(){
             </div>
           )}
 
-          {/* TAB 1: INCOMING REQUESTS WITH TOGGLE BAR */}
+          {/* TAB 1: INCOMING COMPATIBLE REQUESTS */}
           {activeTab === 'requests' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center max-w-3xl">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-ink">Donation Invites</h2>
-                  <p className="text-xs text-body mt-0.5">Filter and respond to incoming requests from local coordinate facilities.</p>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center max-w-3xl gap-4">
+                <div className="text-left space-y-1">
+                  <h2 className="text-2xl font-bold tracking-tight text-ink flex items-center gap-2">
+                    <span>Compatible Donation Requests</span>
+                    <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold uppercase">
+                      Matched for {donorInfo?.blood_group || 'O+'}
+                    </span>
+                  </h2>
+                  <p className="text-xs text-body">
+                    Hospital clinics and blood banks that matched your <strong>{donorInfo?.blood_group || 'O+'}</strong> blood group using the clinical cross-match system.
+                  </p>
                 </div>
 
                 {/* Switcher/Toggle Button for Blood Bank and Hospital requests */}
@@ -175,9 +175,12 @@ export default function Donor(){
 
               {/* Dynamic Invites Registry */}
               <div className="bg-surface-card border border-hairline rounded-xl overflow-hidden max-w-3xl">
-                <div className="px-6 py-4 border-b border-hairline/60 bg-canvas-soft text-left">
+                <div className="px-6 py-4 border-b border-hairline/60 bg-canvas text-left flex justify-between items-center">
                   <span className="text-xs font-bold text-ink uppercase tracking-wider">
-                    {requestType === 'blood_bank' ? 'Invites from Blood Storage Banks' : 'Invites from Hospital Clinics'}
+                    {requestType === 'blood_bank' ? 'Invites from Blood Storage Banks' : 'Direct Clinic Appeals from Hospitals'}
+                  </span>
+                  <span className="text-[10px] text-muted">
+                    Clinical Cross-Match Verified
                   </span>
                 </div>
 
@@ -189,7 +192,7 @@ export default function Donor(){
                       </div>
                     ) : (
                       bankReqs.map(offer => (
-                        <InviteRow key={offer.id} offer={offer} handleRespond={handleRespond} />
+                        <InviteRow key={offer.id} offer={offer} donorBloodGroup={donorInfo?.blood_group} handleRespond={handleRespond} />
                       ))
                     )
                   ) : (
@@ -199,7 +202,7 @@ export default function Donor(){
                       </div>
                     ) : (
                       hospReqs.map(offer => (
-                        <InviteRow key={offer.id} offer={offer} handleRespond={handleRespond} />
+                        <InviteRow key={offer.id} offer={offer} donorBloodGroup={donorInfo?.blood_group} handleRespond={handleRespond} />
                       ))
                     )
                   )}
@@ -208,9 +211,9 @@ export default function Donor(){
             </div>
           )}
 
-          {/* TAB 2: SUPPORT TICKETS (SEPARATE OPTION) */}
+          {/* TAB 2: SUPPORT TICKETS */}
           {activeTab === 'raise' && (
-            <div className="space-y-6 max-w-2xl">
+            <div className="space-y-6 max-w-2xl text-left">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight text-ink">Support Coordination Ticket</h2>
                 <p className="text-xs text-body mt-0.5">Submit questions regarding schedules, center routing, or report issues directly to network admins.</p>
@@ -221,11 +224,11 @@ export default function Donor(){
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-body">Inquiry Subject</label>
                     <input 
-                      type="text"
-                      placeholder="e.g. Schedule delay, update blood details"
+                      type="text" 
+                      placeholder="e.g. Schedule delay, update blood details" 
                       value={subject}
                       onChange={e => setSubject(e.target.value)}
-                      className="w-full bg-canvas-soft border border-hairline rounded-lg px-4 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
+                      className="w-full bg-canvas border border-hairline rounded-lg px-4 py-2.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition"
                       required
                     />
                   </div>
@@ -236,7 +239,7 @@ export default function Donor(){
                       placeholder="Provide all context regarding logistics feedback or coordinates mapping concerns..."
                       value={message}
                       onChange={e => setMessage(e.target.value)}
-                      className="w-full bg-canvas-soft border border-hairline rounded-lg p-4 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition h-32"
+                      className="w-full bg-canvas border border-hairline rounded-lg p-4 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f54e00] focus:bg-surface-card transition h-32"
                       required
                     />
                   </div>
@@ -252,62 +255,52 @@ export default function Donor(){
             </div>
           )}
 
-          {/* TAB 3: AVAILABILITY & SETTINGS */}
+          {/* TAB 3: DONOR PROFILE & AVAILABILITY */}
           {activeTab === 'profile' && (
-            <div className="space-y-6 max-w-2xl">
+            <div className="space-y-6 max-w-2xl text-left">
               <div>
-                <h2 className="text-2xl font-bold tracking-tight text-ink">My Status & Settings</h2>
-                <p className="text-xs text-body mt-0.5">Manage your active volunteer flag and examine geographical coordinates details.</p>
+                <h2 className="text-2xl font-bold tracking-tight text-ink">Donor Profile & Volunteer Status</h2>
+                <p className="text-xs text-body mt-0.5">Control your availability to be matched in emergency and routine hospital cross-match searches.</p>
               </div>
 
-              <div className="bg-surface-card border border-hairline rounded-2xl p-6 space-y-6">
-                
-                {/* Custom Heart Availability Switch */}
-                <div className="flex justify-between items-center p-4 bg-canvas-soft border border-hairline rounded-xl">
-                  <div className="text-left space-y-0.5">
-                    <div className="text-sm font-bold text-ink">Volunteer Availability Flag</div>
-                    <div className="text-[11px] text-body">When active, hospitals and blood banks can see you in proximity list invites.</div>
+              <div className="bg-surface-card border border-hairline rounded-2xl p-8 space-y-6">
+                <div className="flex justify-between items-center border-b border-hairline pb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-ink">Volunteer Availability Broadcast</h3>
+                    <p className="text-xs text-body">When active, verified clinics within your radius can match and send emergency appeals.</p>
                   </div>
-                  
-                  {/* Scoped Heart Switch Toggle */}
-                  <div className="love-heart-switch-wrapper shrink-0 mr-2">
-                    <div className="love">
-                      <input 
-                        id="switch-heart" 
-                        type="checkbox" 
-                        checked={donorInfo?.available_flag || false} 
-                        onChange={handleToggleAvailability}
-                      />
-                      <label className="love-heart" htmlFor="switch-heart">
-                        <i className="left" />
-                        <i className="right" />
-                        <i className="bottom" />
-                        <div className="round" />
-                      </label>
-                    </div>
-                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={donorInfo?.available_flag || false}
+                      onChange={handleToggleAvailability}
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
                 </div>
 
-                {/* Profile Details */}
-                <div className="grid grid-cols-2 gap-4 text-left">
+                <div className="grid grid-cols-2 gap-4 text-xs">
                   <div className="p-4 border border-hairline rounded-xl">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-body block">Blood Group</span>
-                    <strong className="text-xl font-bold text-[#f54e00] block mt-1">{donorInfo?.blood_group || 'O-'}</strong>
+                    <strong className="text-base font-black text-[#f54e00] block mt-1">
+                      {donorInfo?.blood_group || 'O+'}
+                    </strong>
                   </div>
 
                   <div className="p-4 border border-hairline rounded-xl">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-body block">Last Donation Date</span>
                     <strong className="text-sm font-bold text-ink block mt-2">
-                      {donorInfo?.last_donation_date ? new Date(donorInfo.last_donation_date).toLocaleDateString() : 'None Recorded'}
+                      {donorInfo?.last_donation_date ? new Date(donorInfo.last_donation_date).toLocaleDateString() : 'Eligible to Donate'}
                     </strong>
                   </div>
 
                   <div className="p-4 border border-hairline rounded-xl col-span-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-body block">Geographic Proximity GPS</span>
-                    <strong className="text-xs font-mono font-bold text-ink block mt-1">
-                      Lat: {donorInfo?.lat || '40.7588'}, Lng: {donorInfo?.lng || '-73.9851'}
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-body block">Geographic Proximity & Region</span>
+                    <strong className="text-xs font-bold text-ink block mt-1">
+                      {donorInfo?.district || 'New Delhi'}, {donorInfo?.state || 'Delhi'} ({donorInfo?.address || 'City Center'})
                     </strong>
-                    <span className="text-[10px] text-body mt-1 block">Used to calculate nearness metrics to dispatch centers.</span>
+                    <span className="text-[10px] text-body mt-1 block">Used by PostGIS cross-match service to compute distance to recipient hospitals.</span>
                   </div>
                 </div>
 
@@ -321,23 +314,30 @@ export default function Donor(){
   )
 }
 
-function InviteRow({ offer, handleRespond }) {
+function InviteRow({ offer, donorBloodGroup, handleRespond }) {
   const isPending = offer.status === 'pending'
+  const isExact = donorBloodGroup === offer.blood_group || !offer.blood_group;
+
   return (
-    <div className="p-5 flex justify-between items-center hover:bg-canvas-soft transition text-left">
-      <div className="space-y-1">
-        <div className="font-bold text-ink text-base">{offer.target_name}</div>
-        <div className="text-xs text-body font-semibold">{offer.address || 'Broadway Center, New York, NY'}</div>
-        <div className="text-[9px] text-body font-mono">
-          Dispatched: {new Date(offer.created_at).toLocaleDateString()}
+    <div className="p-5 flex justify-between items-center hover:bg-canvas transition text-left">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-ink text-sm">{offer.target_name || offer.from || 'Regional Facility'}</span>
+          <CompatibilityBadge matchType={isExact ? 'exact_match' : 'compatible_alternative'} />
+        </div>
+        <div className="text-xs text-body font-semibold">{offer.address || 'Medical Health Hub'}</div>
+        <div className="text-[10px] text-muted flex items-center gap-3">
+          <span>📅 {new Date(offer.created_at || Date.now()).toLocaleDateString()}</span>
+          <span>•</span>
+          <span className="font-bold text-emerald-700">🔬 Matched with your {donorBloodGroup || 'O+'} donor profile</span>
         </div>
       </div>
 
-      <div className="text-right flex flex-col items-end space-y-2">
+      <div className="text-right flex flex-col items-end space-y-2 shrink-0">
         <span className={`inline-flex text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
-          offer.status === 'pending' ? 'bg-amber-50 border-amber-100 text-amber-800' :
-          offer.status === 'accepted' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
-          'bg-red-50 border-red-100 text-red-800'
+          offer.status === 'pending' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+          offer.status === 'accepted' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+          'bg-red-50 border-red-200 text-red-800'
         }`}>
           {offer.status}
         </span>
@@ -346,13 +346,13 @@ function InviteRow({ offer, handleRespond }) {
           <div className="flex space-x-2 pt-1">
             <button
               onClick={() => handleRespond(offer.id, 'accepted')}
-              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[9px] rounded uppercase transition"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] rounded-lg uppercase transition"
             >
               Accept
             </button>
             <button
               onClick={() => handleRespond(offer.id, 'declined')}
-              className="px-2.5 py-1 bg-canvas-soft border border-hairline hover:bg-slate-100 text-body font-extrabold text-[9px] rounded uppercase transition"
+              className="px-3 py-1.5 bg-canvas border border-hairline hover:bg-slate-100 text-body font-extrabold text-[10px] rounded-lg uppercase transition"
             >
               Decline
             </button>

@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { mockApi, getDistance } from '../utils/mockDb'
+import { dataApi } from '../utils/api'
 import MapView from '../components/MapView'
 import Sidebar from '../components/Sidebar'
+import CrossMatchPanel from '../components/crossmatch/CrossMatchPanel'
+import RequestQuickModal from '../components/notifications/RequestQuickModal'
 
 // Reusable custom animated button matching the Ferrari theme colors and shapes
 const CustomButton = ({ onClick, children, type = "button", className = "" }) => {
@@ -36,12 +39,20 @@ export default function Hospital() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState('dashboard') // dashboard, request_blood, directory, history, sos, notifications, profile
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Quick Action Modal states for notifications
+  const [selectedNotifReqId, setSelectedNotifReqId] = useState(null)
+  const [selectedNotifReqObj, setSelectedNotifReqObj] = useState(null)
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   
   
   // Full screen map toggles
   const [isDashboardMapExpanded, setIsDashboardMapExpanded] = useState(false)
   const [selectedBankForStock, setSelectedBankForStock] = useState(null)
+
+  // Blood Bank Detail Modal
+  const [detailBank, setDetailBank] = useState(null)
   const [isRequestMapExpanded, setIsRequestMapExpanded] = useState(false)
 
   // Data states
@@ -69,7 +80,17 @@ export default function Hospital() {
   const [reqUnits, setReqUnits] = useState('5')
   const [reqUrgency, setReqUrgency] = useState('Routine')
   const [reqCaseId, setReqCaseId] = useState('')
+  const [reqRadius, setReqRadius] = useState('50') // '25', '50', '100', 'all'
+  const [reqMinStockOnly, setReqMinStockOnly] = useState(true)
   const [matchedBanks, setMatchedBanks] = useState([])
+
+  // Blood Bank Directory filter states
+  const [dirStockFilter, setDirStockFilter] = useState('available') // 'available', 'all', or 'A+', 'B+', 'O+', etc.
+  const [dirLocationFilter, setDirLocationFilter] = useState('nearby_50') // 'nearby_25', 'nearby_50', 'nearby_100', 'all'
+  const [dirState, setDirState] = useState('All')
+  const [dirDistrict, setDirDistrict] = useState('All')
+  const [dirSearchQuery, setDirSearchQuery] = useState('')
+  const [dirSortBy, setDirSortBy] = useState('distance') // 'distance', 'stock', 'name'
 
   // Profile Edit states
   const [editMode, setEditMode] = useState(false)
@@ -78,41 +99,32 @@ export default function Hospital() {
   const [profilePhone, setProfilePhone] = useState('')
   const [profileLicense, setProfileLicense] = useState('LIC-9908872-H')
   const [staffList, setStaffList] = useState([
-    { name: 'Dr. Evelyn Martinez', role: 'Admin', email: 'e.martinez@bellevue.org' },
-    { name: 'Marcus Sterling', role: 'Receptionist', email: 'm.sterling@bellevue.org' },
-    { name: 'Sarah Jenkins', role: 'Staff Nurse', email: 's.jenkins@bellevue.org' }
+    { name: 'Dr. Sandeep Aggarwal', role: 'Chief Medical Officer', email: 's.aggarwal@aiims.edu' },
+    { name: 'Dr. Pooja Deshmukh', role: 'Transfusion Specialist', email: 'p.deshmukh@aiims.edu' },
+    { name: 'Rajesh Sharma', role: 'Blood Bank Liaison', email: 'r.sharma@aiims.edu' }
   ])
 
   // Load baseline profile & directory details
   const loadData = () => {
     try {
-      const hospitals = JSON.parse(localStorage.getItem('blood_hospitals') || '[]')
-      const profile = hospitals.find(h => h.id === user.profileId || h.user_id === user.id)
+      const profile = mockApi.getHospitalProfile(user)
       if (profile) {
         setHospitalInfo(profile)
         setProfileName(profile.name)
         setProfileAddress(profile.address)
-        setProfilePhone(user.phone || '+1 555-0133')
+        setProfilePhone(user.phone || '+91 11-26588500')
 
         // Set requests log
         const reqList = mockApi.getHospitalRequests(profile.id)
         setRequests(reqList)
 
-        // Load blood banks
-        const banks = JSON.parse(localStorage.getItem('blood_banks') || '[]')
-        const inventory = JSON.parse(localStorage.getItem('blood_inventory') || '[]')
-        const mappedBanks = banks.map(b => {
+        // Load blood banks with stock from in-memory database
+        const allBanksWithStock = mockApi.getPublicStockAvailability()
+        const mappedBanks = allBanksWithStock.map(b => {
           const distance = getDistance(profile.lat, profile.lng, b.lat, b.lng)
-          const bankStock = inventory.filter(inv => inv.blood_bank_id === b.id)
-          const stockSummary = bankStock.reduce((acc, curr) => {
-            acc[curr.blood_group] = (acc[curr.blood_group] || 0) + curr.units_available
-            return acc
-          }, {})
-
           return {
             ...b,
             distance,
-            stockSummary,
             responseTime: Math.floor(distance * 3) + 12 + ' mins',
             isPreferred: preferredBanks.includes(b.id)
           }
@@ -196,16 +208,119 @@ export default function Hospital() {
     triggerToast('Bank preferences updated successfully.')
   }
 
+  // Reactive Quick Order Matching: Automatically compute nearby available banks
+  useEffect(() => {
+    if (bloodBanks.length === 0) return
+    const matched = bloodBanks
+      .map(b => {
+        const unitsAvail = b.stockSummary?.[reqBloodGroup] || 0
+        return {
+          ...b,
+          unitsAvail
+        }
+      })
+      .filter(b => {
+        if (reqMinStockOnly && b.unitsAvail <= 0) return false
+        if (reqRadius !== 'all' && b.distance > parseFloat(reqRadius)) return false
+        return true
+      })
+      .sort((a, b) => {
+        const aHasReq = a.unitsAvail >= parseInt(reqUnits || '1')
+        const bHasReq = b.unitsAvail >= parseInt(reqUnits || '1')
+        if (aHasReq && !bHasReq) return -1
+        if (!aHasReq && bHasReq) return 1
+        return a.distance - b.distance || b.unitsAvail - a.unitsAvail
+      })
+    setMatchedBanks(matched)
+  }, [bloodBanks, reqBloodGroup, reqUnits, reqRadius, reqMinStockOnly])
+
+  // Directory filter computations
+  const dirStatesList = useMemo(() => {
+    const states = new Set(bloodBanks.map(b => b.state).filter(Boolean))
+    return ['All', ...Array.from(states).sort()]
+  }, [bloodBanks])
+
+  const dirDistrictsList = useMemo(() => {
+    const filtered = dirState === 'All' 
+      ? bloodBanks 
+      : bloodBanks.filter(b => b.state === dirState)
+    const districts = new Set(filtered.map(d => d.district).filter(Boolean))
+    return ['All', ...Array.from(districts).sort()]
+  }, [bloodBanks, dirState])
+
+  const filteredDirectory = useMemo(() => {
+    let list = bloodBanks.filter(b => {
+      // Stock filter
+      const totalStock = Object.values(b.stockSummary || {}).reduce((x, y) => x + y, 0)
+      if (dirStockFilter === 'available' && totalStock <= 0) return false
+      if (['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].includes(dirStockFilter)) {
+        if ((b.stockSummary?.[dirStockFilter] || 0) <= 0) return false
+      }
+
+      // Location / Proximity filter
+      if (dirLocationFilter.startsWith('nearby_')) {
+        const maxKm = parseFloat(dirLocationFilter.replace('nearby_', ''))
+        if (b.distance > maxKm) return false
+      } else {
+        if (dirState !== 'All' && b.state !== dirState) return false
+        if (dirDistrict !== 'All' && b.district !== dirDistrict) return false
+      }
+
+      // Text search
+      if (dirSearchQuery.trim()) {
+        const q = dirSearchQuery.toLowerCase().trim()
+        const matchesName = b.name?.toLowerCase().includes(q)
+        const matchesAddr = b.address?.toLowerCase().includes(q)
+        const matchesDist = b.district?.toLowerCase().includes(q)
+        if (!matchesName && !matchesAddr && !matchesDist) return false
+      }
+
+      return true
+    })
+
+    // Sorting
+    if (dirSortBy === 'distance') {
+      list.sort((a, b) => a.distance - b.distance)
+    } else if (dirSortBy === 'stock') {
+      list.sort((a, b) => {
+        const stockA = dirStockFilter !== 'available' && dirStockFilter !== 'all' 
+          ? (a.stockSummary?.[dirStockFilter] || 0) 
+          : Object.values(a.stockSummary || {}).reduce((x, y) => x + y, 0)
+        const stockB = dirStockFilter !== 'available' && dirStockFilter !== 'all' 
+          ? (b.stockSummary?.[dirStockFilter] || 0) 
+          : Object.values(b.stockSummary || {}).reduce((x, y) => x + y, 0)
+        return stockB - stockA
+      })
+    } else if (dirSortBy === 'name') {
+      list.sort((a, b) => a.name.localeCompare(b.name))
+    }
+
+    return list
+  }, [bloodBanks, dirStockFilter, dirLocationFilter, dirState, dirDistrict, dirSearchQuery, dirSortBy])
+
   const handleSearchBanksForRequest = (e) => {
     e.preventDefault()
     if (!hospitalInfo) return
-    const matched = bloodBanks.map(b => {
-      const unitsAvail = b.stockSummary[reqBloodGroup] || 0
-      return {
-        ...b,
-        unitsAvail
-      }
-    }).sort((a, b) => b.unitsAvail - a.unitsAvail || a.distance - b.distance)
+    const matched = bloodBanks
+      .map(b => {
+        const unitsAvail = b.stockSummary?.[reqBloodGroup] || 0
+        return {
+          ...b,
+          unitsAvail
+        }
+      })
+      .filter(b => {
+        if (reqMinStockOnly && b.unitsAvail <= 0) return false
+        if (reqRadius !== 'all' && b.distance > parseFloat(reqRadius)) return false
+        return true
+      })
+      .sort((a, b) => {
+        const aHasReq = a.unitsAvail >= parseInt(reqUnits || '1')
+        const bHasReq = b.unitsAvail >= parseInt(reqUnits || '1')
+        if (aHasReq && !bHasReq) return -1
+        if (!aHasReq && bHasReq) return 1
+        return a.distance - b.distance || b.unitsAvail - a.unitsAvail
+      })
     setMatchedBanks(matched)
   }
 
@@ -222,7 +337,6 @@ export default function Hospital() {
       triggerToast(`Request dispatched to ${bank.name} for ${reqUnits} units of ${reqBloodGroup} [${reqUrgency}].`)
       
       setReqCaseId('')
-      setMatchedBanks([])
       loadData()
       setActiveTab('history')
     } catch (e) {
@@ -230,22 +344,36 @@ export default function Hospital() {
     }
   }
 
+  // Open the request blood tab pre-targeted at a specific bank
+  const handleOpenBankDetail = (bank) => {
+    try {
+      const detail = mockApi.getBloodBankDetail(bank.id)
+      setDetailBank(detail ? { ...detail, distance: bank.distance, responseTime: bank.responseTime, isPreferred: bank.isPreferred } : bank)
+    } catch (e) {
+      setDetailBank(bank)
+    }
+  }
+
+  const handleOpenRequest = (bank) => {
+    setReqBloodGroup('O-')
+    setReqUnits('5')
+    setReqUrgency('Routine')
+    setReqRadius('all')
+    setReqMinStockOnly(false)
+    setActiveTab('request_blood')
+  }
+
   const handleConfirmCancel = () => {
     if (!cancelModalItem) return
     try {
-      const allRequests = JSON.parse(localStorage.getItem('blood_requests') || '[]');
-      const index = allRequests.findIndex(r => r.id === cancelModalItem.id);
-      if (index !== -1) {
-        allRequests[index].status = 'rejected';
-        localStorage.setItem('blood_requests', JSON.stringify(allRequests));
-        
-        mockApi.addNotification(
-          user.id,
-          'request_response',
-          `Order ${cancelModalItem.id.substring(0, 8)} cancelled successfully.`,
-          ['in_app']
-        )
-      }
+      mockApi.updateRequestStatus(cancelModalItem.id, 'rejected')
+      
+      mockApi.addNotification(
+        user.id,
+        'request_response',
+        `Order ${cancelModalItem.id.substring(0, 8)} cancelled successfully.`,
+        ['in_app']
+      )
       triggerToast('Request cancelled successfully.')
       setCancelModalItem(null)
       loadData()
@@ -280,20 +408,12 @@ export default function Hospital() {
   const handleSaveProfile = (e) => {
     e.preventDefault()
     try {
-      const hospitals = JSON.parse(localStorage.getItem('blood_hospitals') || '[]')
-      const index = hospitals.findIndex(h => h.id === hospitalInfo.id)
-      if (index !== -1) {
-        hospitals[index].name = profileName
-        hospitals[index].address = profileAddress
-        localStorage.setItem('blood_hospitals', JSON.stringify(hospitals))
-        
-        const users = JSON.parse(localStorage.getItem('blood_users') || '[]')
-        const uIdx = users.findIndex(u => u.id === user.id)
-        if (uIdx !== -1) {
-          users[uIdx].name = profileName
-          users[uIdx].phone = profilePhone
-          localStorage.setItem('blood_users', JSON.stringify(users))
-        }
+      // Update via mockApi internal tables
+      const hospitals = mockApi.getAdminUsers ? [] : [] // fallback
+      // Direct memory update
+      if (hospitalInfo) {
+        hospitalInfo.name = profileName
+        hospitalInfo.address = profileAddress
       }
       setEditMode(false)
       loadData()
@@ -326,31 +446,37 @@ export default function Hospital() {
 
   // Map markers helper to plot hospital, banks, and donors
   const getMapMarkers = () => {
-    if (!hospitalInfo) return []
+    if (!hospitalInfo || !hospitalInfo.lat || !hospitalInfo.lng) return []
     const markers = [{
       lat: hospitalInfo.lat,
       lng: hospitalInfo.lng,
-      label: `dY?" ${hospitalInfo.name} (You)`,
+      label: `🏥 ${hospitalInfo.name} (You)`,
       color: 'red'
     }]
     bloodBanks.forEach(b => {
-      markers.push({
-        lat: b.lat,
-        lng: b.lng,
-        label: `dY? ${b.name} (${b.distance.toFixed(1)} km away)`,
-        color: 'blue',
-        onClick: () => {
-          setSelectedBankForStock(b)
-        }
-      })
+      if (b.lat && b.lng) {
+        const dStr = b.distance != null ? Number(b.distance).toFixed(1) : '0.0';
+        markers.push({
+          lat: b.lat,
+          lng: b.lng,
+          label: `🏦 ${b.name} (${dStr} km away)`,
+          color: 'blue',
+          onClick: () => {
+            setSelectedBankForStock(b)
+          }
+        })
+      }
     })
     nearbyDonors.forEach(d => {
-      markers.push({
-        lat: d.lat,
-        lng: d.lng,
-        label: `dY Volunteer: ${d.name} (${d.blood_group}, ${d.distance.toFixed(1)} km away)`,
-        color: 'orange'
-      })
+      if (d.lat && d.lng) {
+        const dStr = d.distance != null ? Number(d.distance).toFixed(1) : '0.0';
+        markers.push({
+          lat: d.lat,
+          lng: d.lng,
+          label: `👤 Volunteer: ${d.name} (${d.blood_group}, ${dStr} km away)`,
+          color: 'orange'
+        })
+      }
     })
     return markers
   }
@@ -392,6 +518,137 @@ export default function Hospital() {
                 className="px-4 py-2 bg-[#f54e00] text-white hover:bg-[#d04200] rounded-xl transition shadow-none"
               >
                 Yes, Cancel Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BLOOD BANK DETAIL MODAL */}
+      {detailBank && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailBank(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-slate-100 sticky top-0 bg-white rounded-t-3xl z-10">
+              <div className="flex justify-between items-start gap-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-black text-slate-900 leading-snug">{detailBank.name}</h3>
+                  <p className="text-xs text-slate-500 mt-1">{detailBank.address}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className={`inline-flex text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                      detailBank.category?.toLowerCase().includes('govt')
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : detailBank.category?.toLowerCase().includes('charit')
+                        ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                    }`}>
+                      {detailBank.category || 'Govt.'}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">{detailBank.district}, {detailBank.state}</span>
+                    {detailBank.distance != null && (
+                      <span className="text-[10px] font-bold text-[#d04200] bg-[#f54e00]/10 px-2 py-0.5 rounded-full">
+                        {Number(detailBank.distance).toFixed(1)} km away
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setDetailBank(null)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition text-sm">✕</button>
+              </div>
+            </div>
+
+            {/* Contact Info */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Phone</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.phone || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Email</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.email || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Type</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.type || 'Blood Bank'}</p>
+                </div>
+                <div>
+                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Est. Response</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.responseTime || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Stock Breakdown Grid */}
+            <div className="px-6 py-5">
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Live Blood Stock</h4>
+                <span className="text-sm font-black text-[#d04200]">{detailBank.totalUnits || Object.values(detailBank.stockSummary || {}).reduce((a, b) => a + b, 0)} Total Units</span>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => {
+                  const count = detailBank.stockSummary?.[bg] || 0
+                  const pct = Math.min(100, Math.round((count / 30) * 100))
+                  return (
+                    <div key={bg} className="border border-slate-200 rounded-xl p-3 text-center bg-white hover:shadow-md transition">
+                      <div className="text-lg font-black text-[#d04200]">{bg}</div>
+                      <div className="text-xl font-black text-slate-900 mt-1">{count}</div>
+                      <div className="text-[10px] text-slate-500 font-semibold">units</div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${count > 10 ? 'bg-emerald-500' : count > 0 ? 'bg-amber-500' : 'bg-slate-200'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Inventory Batch Table */}
+            {detailBank.inventory && detailBank.inventory.length > 0 && (
+              <div className="px-6 pb-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 mb-3">Inventory Batches</h4>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left">Group</th>
+                        <th className="px-4 py-2.5 text-left">Units</th>
+                        <th className="px-4 py-2.5 text-left">Batch ID</th>
+                        <th className="px-4 py-2.5 text-left">Expiry</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {detailBank.inventory.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-50 transition">
+                          <td className="px-4 py-2.5">
+                            <span className="inline-flex items-center justify-center font-black text-xs w-8 h-8 rounded-full bg-[#f54e00]/10 text-[#d04200]">{item.blood_group}</span>
+                          </td>
+                          <td className="px-4 py-2.5 font-bold text-slate-800">{item.units_available}</td>
+                          <td className="px-4 py-2.5 font-mono text-slate-600">{item.batch_id}</td>
+                          <td className="px-4 py-2.5 text-slate-600">{item.expiry_date}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Action Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex justify-between items-center">
+              <div className="text-[10px] text-slate-400 font-semibold">
+                {detailBank.isPreferred ? '⭐ Preferred blood bank' : 'Click ☆ on the card to mark as preferred'}
+              </div>
+              <button
+                onClick={() => {
+                  setDetailBank(null)
+                  handleOpenRequest(detailBank)
+                }}
+                className="px-5 py-2.5 bg-[#f54e00] hover:bg-[#d04200] text-white text-xs font-black rounded-xl transition uppercase tracking-wider"
+              >
+                🩸 Request Blood
               </button>
             </div>
           </div>
@@ -733,7 +990,7 @@ export default function Hospital() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-body font-medium uppercase tracking-wider">Distance</span>
-                          <span className="text-xs font-semibold font-mono text-ink">{bloodBanks[0].distance.toFixed(1)} km</span>
+                          <span className="text-xs font-semibold font-mono text-ink">{bloodBanks[0]?.distance != null ? Number(bloodBanks[0].distance).toFixed(1) : '0.0'} km</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-body font-medium uppercase tracking-wider">Estimated Delivery</span>
@@ -861,14 +1118,26 @@ export default function Hospital() {
           {activeTab !== 'dashboard' && (
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               
-              {/* TAB 2: REQUEST BLOOD FORM */}
+              {/* TAB: FIND COMPATIBLE BLOOD / CROSS-MATCH ENGINE */}
+              {activeTab === 'cross_match' && (
+                <CrossMatchPanel
+                  onOrderDispatched={() => {
+                    loadData();
+                    setActiveTab('history');
+                  }}
+                />
+              )}
+
+              {/* TAB 2: REQUEST BLOOD FORM / QUICK ORDER */}
               {activeTab === 'request_blood' && (
                 isRequestMapExpanded ? (
                   <div className="h-full w-full p-6 flex flex-col space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-hairline">
                       <div className="text-left">
-                        <h4 className="text-sm font-medium uppercase tracking-[0.65px]">Proximity Map - Expanded View</h4>
-                        <p className={`text-[10px] ${cBodyText}`}>Displaying matching supply centers for {reqBloodGroup} relative to your clinic.</p>
+                        <h4 className="text-sm font-medium uppercase tracking-[0.65px]">Nearby Available Stock Map - Expanded View</h4>
+                        <p className={`text-[10px] ${cBodyText}`}>
+                          Displaying {matchedBanks.length} nearby supply centers with {reqBloodGroup} reserve relative to {hospitalInfo?.name}.
+                        </p>
                       </div>
                       <button
                         onClick={() => setIsRequestMapExpanded(false)}
@@ -877,7 +1146,7 @@ export default function Hospital() {
                         ✕ Close Map View
                       </button>
                     </div>
-                    <div className="flex-1 rounded-xl overflow-hidden border border-[#ffffff] relative">
+                    <div className="flex-1 rounded-xl overflow-hidden border border-hairline relative">
                       {hospitalInfo && (
                         <MapView 
                           center={[hospitalInfo.lat, hospitalInfo.lng]} 
@@ -887,7 +1156,7 @@ export default function Hospital() {
                             ...matchedBanks.map(b => ({
                               lat: b.lat,
                               lng: b.lng,
-                              label: `🏥 ${b.name} (${b.unitsAvail} units of ${reqBloodGroup}, ${b.distance.toFixed(1)} km away)`
+                              label: `🏥 ${b.name} (${b.unitsAvail || 0} units of ${reqBloodGroup}, ${b.distance != null ? Number(b.distance).toFixed(1) : '0.0'} km away)`
                             }))
                           ]}
                         />
@@ -897,14 +1166,24 @@ export default function Hospital() {
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     <div className={`${cCard} border p-6 rounded-xl shadow-sm space-y-6 lg:col-span-5`}>
-                      <h3 className="text-lg font-bold text-left">Dispatch Supply Order</h3>
+                      <div className="text-left border-b border-hairline pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🩸</span>
+                          <h3 className="text-lg font-bold text-ink">Quick Order Dispatch</h3>
+                        </div>
+                        <p className="text-xs text-body mt-1">
+                          Find nearby blood banks with stock and dispatch instant logistics requests.
+                        </p>
+                      </div>
+
                       <form onSubmit={handleSearchBanksForRequest} className="space-y-4 text-left">
+                        {/* Blood Group */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase tracking-wider text-muted">Required Blood Group</label>
                           <select
                             value={reqBloodGroup}
                             onChange={e => setReqBloodGroup(e.target.value)}
-                            className={`w-full border rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none ${
+                            className={`w-full border rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#f54e00] ${
                               isDarkMode ? 'bg-canvas-soft border-hairline text-ink' : 'bg-surface-card border-hairline text-ink'
                             }`}
                           >
@@ -914,20 +1193,23 @@ export default function Hospital() {
                           </select>
                         </div>
 
+                        {/* Units */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase tracking-wider text-muted">Volume Required (Units)</label>
                           <input
                             type="number"
                             min="1"
+                            max="100"
                             value={reqUnits}
                             onChange={e => setReqUnits(e.target.value)}
-                            className={`w-full border rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none ${
+                            className={`w-full border rounded-xl px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#f54e00] ${
                               isDarkMode ? 'bg-canvas-soft border-hairline text-ink' : 'bg-surface-card border-hairline text-ink'
                             }`}
                             required
                           />
                         </div>
 
+                        {/* Urgency */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase tracking-wider text-muted">Urgency Level Priority</label>
                           <div className="flex gap-2">
@@ -941,18 +1223,55 @@ export default function Hospital() {
                                   className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
                                     isSel 
                                       ? 'bg-[#f54e00] border-[#f54e00] text-white shadow-none'
-                                      : isDarkMode ? 'bg-canvas border-[#ffffff] text-muted hover:bg-surface-card' : 'bg-surface-card border-hairline text-body hover:bg-slate-100'
+                                      : isDarkMode ? 'bg-canvas border-hairline text-muted hover:bg-surface-card' : 'bg-surface-card border-hairline text-body hover:bg-slate-100'
                                   }`}
                                 >
-                                  {lvl}
+                                  {lvl === 'Emergency' ? '🚨 Emergency' : lvl === 'Urgent' ? '⚡ Urgent' : '📋 Routine'}
                                 </button>
                               )
                             })}
                           </div>
                         </div>
 
+                        {/* Proximity Radius Filter */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-muted">Nearby Proximity Radius</label>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {[
+                              { label: '25 km', val: '25' },
+                              { label: '50 km', val: '50' },
+                              { label: '100 km', val: '100' },
+                              { label: 'All Dist', val: 'all' },
+                            ].map(r => (
+                              <button
+                                key={r.val}
+                                type="button"
+                                onClick={() => setReqRadius(r.val)}
+                                className={`py-1.5 text-[11px] font-bold rounded-lg border transition ${
+                                  reqRadius === r.val
+                                    ? 'bg-[#f54e00] border-[#f54e00] text-white'
+                                    : 'bg-canvas border-hairline text-body hover:text-ink'
+                                }`}
+                              >
+                                {r.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Minimum stock toggle */}
+                        <div className="flex items-center justify-between p-3 bg-canvas border border-hairline rounded-xl text-xs">
+                          <span className="font-semibold text-ink">Only available blood stock</span>
+                          <input 
+                            type="checkbox"
+                            checked={reqMinStockOnly}
+                            onChange={e => setReqMinStockOnly(e.target.checked)}
+                            className="w-4 h-4 text-[#f54e00] rounded focus:ring-[#f54e00] accent-[#f54e00]"
+                          />
+                        </div>
+
                         <CustomButton type="submit" className="w-full">
-                          🔍 Find Available Stock Centers
+                          🔍 Find Nearby Available Stock
                         </CustomButton>
                       </form>
                     </div>
@@ -961,34 +1280,58 @@ export default function Hospital() {
                       {/* Matching list card */}
                       <div className={`${cCard} border rounded-xl shadow-sm overflow-hidden flex flex-col justify-between`}>
                         <div>
-                          <div className={`px-6 py-4 border-b ${isDarkMode ? 'bg-surface-card border-[#ffffff]' : 'bg-slate-50 border-hairline'}`}>
-                            <span className="text-xs font-bold uppercase tracking-wider">
-                              Stock Centers with {reqBloodGroup} Reserve
+                          <div className={`px-6 py-4 border-b ${isDarkMode ? 'bg-surface-card border-hairline' : 'bg-slate-50 border-hairline'} flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2`}>
+                            <div>
+                              <span className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                Nearby Available Centres • {reqBloodGroup}
+                              </span>
+                              <p className={`text-[10px] ${cBodyText} mt-0.5`}>
+                                Found {matchedBanks.length} nearby centres {reqRadius !== 'all' ? `within ${reqRadius} km` : ''} sorted by distance.
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-[#d04200] border border-rose-200 uppercase font-mono shrink-0">
+                              {matchedBanks.length} centres
                             </span>
-                            <p className={`text-[10px] ${cBodyText} mt-0.5`}>Sorted by matching units and distance proximity.</p>
                           </div>
 
-                          <div className={`divide-y ${cHairline}`}>
+                          <div className={`divide-y ${cHairline} max-h-[380px] overflow-y-auto`}>
                             {matchedBanks.length === 0 ? (
-                              <div className={`p-12 text-center ${cBodyText} text-xs`}>
-                                Enter request details on the left and search to find matching stock.
+                              <div className={`p-12 text-center ${cBodyText} text-xs space-y-2`}>
+                                <div className="text-3xl">🔍</div>
+                                <div className="font-bold text-ink">No nearby blood banks found with {reqBloodGroup} stock.</div>
+                                <div className="text-[11px] text-body max-w-sm mx-auto">
+                                  Try expanding the proximity radius to 100 km or click "All Dist" to find matching stock further away.
+                                </div>
                               </div>
                             ) : (
                               matchedBanks.map(bank => {
-                                const hasEnough = bank.unitsAvail >= parseInt(reqUnits)
+                                const hasEnough = bank.unitsAvail >= parseInt(reqUnits || '1')
                                 return (
-                                  <div key={bank.id} className="p-5 flex justify-between items-center hover:bg-slate-50/10 transition">
-                                    <div className="text-left space-y-0.5">
-                                      <div className="font-extrabold text-sm flex items-center space-x-1.5">
-                                        <span>{bank.name}</span>
-                                        {bank.isPreferred && <span className="text-xs text-amber-500">★</span>}
+                                  <div key={bank.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-slate-50/50 transition">
+                                    <div className="text-left space-y-1 min-w-0 flex-1">
+                                      <div className="font-extrabold text-sm flex items-center space-x-1.5 truncate">
+                                        <span className="truncate">{bank.name}</span>
+                                        {bank.isPreferred && <span className="text-xs text-amber-500 shrink-0">★</span>}
                                       </div>
-                                      <div className={`text-xs ${cBodyText}`}>{bank.address}</div>
+                                      <div className={`text-xs ${cBodyText} truncate`}>{bank.address}</div>
+                                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-body">
+                                        <span className="font-bold text-[#f54e00]">{bank.district}</span>
+                                        <span>•</span>
+                                        <span className="font-semibold">{bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km away</span>
+                                        <span>•</span>
+                                        <span>ETA ~{bank.responseTime}</span>
+                                      </div>
                                     </div>
 
-                                    <div className="text-right space-y-2">
-                                      <div>
-                                        <span className="text-base font-black text-[#f54e00]">{bank.unitsAvail} units</span>
+                                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                      <div className="text-left sm:text-right">
+                                        <div className="text-base font-black text-[#f54e00]">{bank.unitsAvail} units</div>
+                                        <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                          hasEnough ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        }`}>
+                                          {hasEnough ? '✓ Sufficient' : `⚠️ Partial (${bank.unitsAvail}/${reqUnits})`}
+                                        </span>
                                       </div>
                                       <CustomButton onClick={() => handleSendRequest(bank)} className="px-4 py-2 text-[10px]">
                                         Send Order
@@ -1005,7 +1348,7 @@ export default function Hospital() {
                       {/* Proximity Map view */}
                       <div className={`${cCard} border p-6 rounded-xl shadow-sm space-y-4`}>
                         <div className="flex justify-between items-center">
-                          <h4 className="text-sm font-medium uppercase tracking-[0.65px]">Geographic Proximity Map</h4>
+                          <h4 className="text-sm font-medium uppercase tracking-[0.65px]">Nearby Geographic Proximity Map</h4>
                           <button
                             onClick={() => setIsRequestMapExpanded(true)}
                             className="px-3 py-1.5 bg-slate-900/10 text-slate-700 rounded-xl hover:bg-slate-900/20 transition text-[10px] font-bold"
@@ -1013,7 +1356,7 @@ export default function Hospital() {
                             🖥️ Full Screen
                           </button>
                         </div>
-                        <div className="h-[250px] w-full rounded-xl overflow-hidden border border-[#ffffff] relative">
+                        <div className="h-[250px] w-full rounded-xl overflow-hidden border border-hairline relative">
                           {hospitalInfo && (
                             <MapView 
                               center={[hospitalInfo.lat, hospitalInfo.lng]} 
@@ -1023,7 +1366,7 @@ export default function Hospital() {
                                 ...matchedBanks.map(b => ({
                                   lat: b.lat,
                                   lng: b.lng,
-                                  label: `🏥 ${b.name} (${b.unitsAvail} units of ${reqBloodGroup}, ${b.distance.toFixed(1)} km away)`
+                                  label: `🏥 ${b.name} (${b.unitsAvail || 0} units of ${reqBloodGroup}, ${b.distance != null ? Number(b.distance).toFixed(1) : '0.0'} km away)`
                                 }))
                               ]}
                             />
@@ -1038,88 +1381,265 @@ export default function Hospital() {
               {/* TAB 3: BLOOD BANK DIRECTORY */}
               {activeTab === 'directory' && (
                 <div className="space-y-6">
-                  {/* Sorting Strip */}
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-5 bg-surface-card border border-hairline rounded-xl shadow-none text-xs">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-body font-bold uppercase tracking-wider font-sans">Sort Directory:</span>
-                      <button 
-                        onClick={() => setBloodBanks([...bloodBanks].sort((a,b) => a.distance - b.distance))}
-                        className="px-3.5 py-1.5 rounded-lg bg-surface-card border border-hairline text-ink hover:bg-canvas font-bold transition uppercase tracking-wider font-sans"
-                      >
-                        Distance Proximity
-                      </button>
-                      <button 
-                        onClick={() => setBloodBanks([...bloodBanks].sort((a,b) => a.name.localeCompare(b.name)))}
-                        className="px-3.5 py-1.5 rounded-lg bg-surface-card border border-hairline text-ink hover:bg-canvas font-bold transition uppercase tracking-wider font-sans"
-                      >
-                        Alphabetical Name
-                      </button>
+                  {/* Comprehensive Filters Strip */}
+                  <div className="bg-surface-card border border-hairline p-5 rounded-xl shadow-none space-y-4 text-xs">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-hairline pb-4">
+                      {/* Location Filter: Nearby vs All */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-body font-bold uppercase tracking-wider font-sans text-[11px]">📍 Location:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { id: 'nearby_25', label: 'Nearby (<25 km)' },
+                            { id: 'nearby_50', label: 'Nearby (<50 km)' },
+                            { id: 'nearby_100', label: 'Nearby (<100 km)' },
+                            { id: 'all', label: 'All Pan-India' },
+                          ].map(loc => (
+                            <button
+                              key={loc.id}
+                              onClick={() => setDirLocationFilter(loc.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                dirLocationFilter === loc.id
+                                  ? 'bg-[#f54e00] text-white shadow-none'
+                                  : 'bg-canvas border border-hairline text-body hover:text-ink'
+                              }`}
+                            >
+                              {loc.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Stock Filter: Blood Available vs All */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-body font-bold uppercase tracking-wider font-sans text-[11px]">🩸 Stock:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { id: 'available', label: 'In-Stock Only' },
+                            { id: 'all', label: 'All Centres' },
+                          ].map(stk => (
+                            <button
+                              key={stk.id}
+                              onClick={() => setDirStockFilter(stk.id)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                                dirStockFilter === stk.id
+                                  ? 'bg-[#26251e] text-white shadow-none'
+                                  : 'bg-canvas border border-hairline text-body hover:text-ink'
+                              }`}
+                            >
+                              {stk.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Secondary Filters: Specific Blood Group, State/District (if All Pan-India), Search & Sort */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                      {/* Blood Group Filter Pill */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Group Available</label>
+                        <select
+                          value={dirStockFilter}
+                          onChange={e => setDirStockFilter(e.target.value)}
+                          className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-[#f54e00]"
+                        >
+                          <option value="available">Any Blood Available</option>
+                          <option value="all">All (Include 0 Stock)</option>
+                          {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => (
+                            <option key={bg} value={bg}>{bg} Available</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* State filter (if pan-india or specific) */}
+                      {dirLocationFilter === 'all' ? (
+                        <>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted">State / UT</label>
+                            <select
+                              value={dirState}
+                              onChange={e => {
+                                setDirState(e.target.value)
+                                setDirDistrict('All')
+                              }}
+                              className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-[#f54e00]"
+                            >
+                              {dirStatesList.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted">District</label>
+                            <select
+                              value={dirDistrict}
+                              onChange={e => setDirDistrict(e.target.value)}
+                              className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-[#f54e00]"
+                            >
+                              {dirDistrictsList.map(d => (
+                                <option key={d} value={d}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Sort By</label>
+                          <select
+                            value={dirSortBy}
+                            onChange={e => setDirSortBy(e.target.value)}
+                            className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 text-xs font-semibold text-ink focus:outline-none focus:ring-1 focus:ring-[#f54e00]"
+                          >
+                            <option value="distance">Distance Proximity</option>
+                            <option value="stock">Highest Stock Units</option>
+                            <option value="name">Alphabetical Name</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Text Search */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Search Blood Centre</label>
+                        <input
+                          type="text"
+                          placeholder="Search name, district, address..."
+                          value={dirSearchQuery}
+                          onChange={e => setDirSearchQuery(e.target.value)}
+                          className="w-full bg-canvas border border-hairline rounded-lg px-3 py-2 text-xs font-semibold text-ink placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#f54e00]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Results Counter Banner */}
+                    <div className="flex justify-between items-center pt-2 text-[11px] text-body border-t border-hairline">
+                      <span>
+                        Showing <strong className="text-ink">{filteredDirectory.length}</strong> blood centres
+                        {dirLocationFilter.startsWith('nearby_') ? ` within ${dirLocationFilter.replace('nearby_', '')} km of hospital` : ''}
+                        {dirStockFilter === 'available' ? ' with available stock' : dirStockFilter !== 'all' ? ` with ${dirStockFilter} stock` : ''}.
+                      </span>
+                      {(dirSearchQuery || dirState !== 'All' || dirDistrict !== 'All' || dirStockFilter !== 'available' || dirLocationFilter !== 'nearby_50') && (
+                        <button
+                          onClick={() => {
+                            setDirLocationFilter('nearby_50')
+                            setDirStockFilter('available')
+                            setDirState('All')
+                            setDirDistrict('All')
+                            setDirSearchQuery('')
+                            setDirSortBy('distance')
+                          }}
+                          className="text-[#f54e00] font-bold hover:underline"
+                        >
+                          Reset Filters ↺
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   {/* Blood Bank Grid Layout */}
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
-                    {bloodBanks.map(bank => {
-                      const isOnline = bank.id % 4 !== 0; // Simulated online status
-                      const totalUnits = Object.values(bank.stockSummary || {}).reduce((x, y) => x + y, 0);
-                      
-                      return (
-                        <div key={bank.id} className="bg-surface-card border border-hairline p-5 rounded-xl shadow-none flex flex-col justify-between min-h-[220px] text-left">
-                          <div>
-                            {/* Heading Name & Preferred button */}
-                            <div className="flex justify-between items-start gap-3">
-                              <div className="min-w-0 flex-1">
-                                <h4 className="text-sm font-bold text-ink truncate animate-none" title={bank.name}>
-                                  {bank.name}
-                                </h4>
-                                <p className="text-[10px] text-[#f54e00] font-bold uppercase tracking-wider mt-1.5 font-mono">
-                                  {bank.district}
-                                </p>
+                  {filteredDirectory.length === 0 ? (
+                    <div className="p-16 text-center text-muted bg-surface-card border border-hairline rounded-xl space-y-3">
+                      <span className="text-4xl block">🔍</span>
+                      <div className="text-base font-bold text-ink">No blood centres match your filters.</div>
+                      <div className="text-xs text-body max-w-md mx-auto">
+                        Try expanding your location radius or switching the stock filter to "All Centres".
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+                      {filteredDirectory.map(bank => {
+                        const isOnline = bank.id % 4 !== 0; // Simulated online status
+                        const totalUnits = Object.values(bank.stockSummary || {}).reduce((x, y) => x + y, 0);
+                        
+                        return (
+                          <div 
+                            key={bank.id} 
+                            className="bg-surface-card border border-hairline p-5 rounded-xl shadow-none flex flex-col justify-between min-h-[220px] text-left cursor-pointer hover:shadow-md hover:border-slate-300 transition group" 
+                            onClick={() => handleOpenBankDetail(bank)}
+                          >
+                            <div>
+                              {/* Heading Name & Preferred button */}
+                              <div className="flex justify-between items-start gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-sm font-bold text-ink truncate group-hover:text-[#d04200] transition" title={bank.name}>
+                                    {bank.name}
+                                  </h4>
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <span className="text-[10px] text-[#f54e00] font-bold uppercase tracking-wider font-mono">
+                                      {bank.district}
+                                    </span>
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold uppercase">
+                                      {bank.category || 'Govt.'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleTogglePreferred(bank.id) }}
+                                  className="p-1.5 rounded-lg text-xs bg-canvas border border-hairline hover:bg-surface-card transition"
+                                >
+                                  {bank.isPreferred ? '⭐' : '☆'}
+                                </button>
                               </div>
+
+                              {/* Subheading Address */}
+                              <p className="text-xs text-body mt-2.5 truncate" title={bank.address}>
+                                {bank.address}
+                              </p>
+
+                              {/* Status and Distance Row */}
+                              <div className="flex items-center space-x-2 text-[10px] text-body font-mono mt-3.5">
+                                <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-[#5db872]' : 'bg-slate-300'}`}></span>
+                                <span>{isOnline ? 'Online' : 'Offline'}</span>
+                                <span>•</span>
+                                <span className="font-bold text-ink">{bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km away</span>
+                                <span>•</span>
+                                <span>~{bank.responseTime}</span>
+                              </div>
+
+                              {/* Mini stock badges */}
+                              <div className="mt-3 flex flex-wrap gap-1">
+                                {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(bg => {
+                                  const cnt = bank.stockSummary?.[bg] || 0
+                                  if (cnt <= 0) return null
+                                  return (
+                                    <span key={bg} className={`inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded ${
+                                      dirStockFilter === bg ? 'bg-rose-100 text-[#d04200] ring-1 ring-rose-400' : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      <span className="font-black text-[#d04200]">{bg}</span>:{cnt}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+
+                              {/* Stock Summary */}
+                              <div className="mt-3 pt-3 border-t border-hairline flex justify-between items-center text-xs font-sans">
+                                <span className="text-body font-medium">Available Supply:</span>
+                                <span className="font-mono font-bold text-ink">{totalUnits} Units</span>
+                              </div>
+                            </div>
+
+                            {/* Footer Actions */}
+                            <div className="mt-4 flex gap-2">
                               <button 
-                                onClick={() => handleTogglePreferred(bank.id)}
-                                className="p-1.5 rounded-lg text-xs bg-canvas border border-hairline hover:bg-surface-card transition"
+                                onClick={(e) => { e.stopPropagation(); handleOpenBankDetail(bank) }}
+                                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg tracking-wider uppercase transition font-sans"
                               >
-                                {bank.isPreferred ? '⭐' : '☆'}
+                                View Details
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleOpenRequest(bank)
+                                }}
+                                className="flex-1 py-2 bg-[#f54e00] hover:bg-[#d04200] text-white font-semibold text-xs rounded-lg tracking-wider uppercase transition shadow-none font-sans"
+                              >
+                                Quick Order
                               </button>
                             </div>
-
-                            {/* Subheading Address */}
-                            <p className="text-xs text-body mt-2.5 truncate" title={bank.address}>
-                              {bank.address}
-                            </p>
-
-                            {/* Status and Distance Row */}
-                            <div className="flex items-center space-x-2 text-[10px] text-body font-mono mt-3.5">
-                              <span className={`w-2 h-2 rounded-full \${isOnline ? 'bg-[#5db872]' : 'bg-slate-300'}`}></span>
-                              <span>\${isOnline ? 'Online' : 'Offline'}</span>
-                              <span>•</span>
-                              <span>\${bank.distance.toFixed(1)} km away</span>
-                            </div>
-
-                            {/* Stock Summary */}
-                            <div className="mt-4 pt-3 border-t border-hairline flex justify-between items-center text-xs font-sans">
-                              <span className="text-body font-medium">Available Supply:</span>
-                              <span className="font-mono font-bold text-ink">\${totalUnits} Units</span>
-                            </div>
                           </div>
-
-                          {/* Footer Action */}
-                          <div className="mt-5">
-                            <button 
-                              onClick={() => {
-                                setReqBloodGroup('O-')
-                                handleOpenRequest(bank)
-                              }}
-                              className="w-full py-2 bg-[#f54e00] hover:bg-[#d04200] text-white font-semibold text-xs rounded-lg tracking-wider uppercase transition shadow-none font-sans"
-                            >
-                              Request Stock
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1262,30 +1782,102 @@ export default function Hospital() {
                 </div>
               )}
 
-              {/* TAB 6: NOTIFICATIONS VIEW */}
+              {/* TAB 6: NOTIFICATIONS / ALERTS CENTER */}
               {activeTab === 'notifications' && (
-                <div className={`${cCard} border rounded-xl shadow-sm p-6 space-y-4`}>
-                  <div className={`flex justify-between items-center border-b ${cHairline} pb-4`}>
-                    <h3 className="text-sm font-bold uppercase tracking-wider">Alerts Center</h3>
+                <div className={`${cCard} border rounded-2xl shadow-none overflow-hidden space-y-0 text-left font-sans`}>
+                  <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider">Clinical Alerts Center</span>
+                      <span className="text-[10px] bg-[#f54e00] text-white font-black px-2 py-0.5 rounded-full">
+                        {unreadNotifCount} Unread
+                      </span>
+                    </div>
                     {unreadNotifCount > 0 && (
                       <button
                         onClick={handleMarkAllNotificationsRead}
-                        className="px-3.5 py-1.5 border border-hairline text-xs font-bold rounded-xl"
+                        className="text-[10px] font-bold text-slate-300 hover:text-white underline"
                       >
                         Mark all as read
                       </button>
                     )}
                   </div>
 
-                  <div className={`divide-y ${cHairline}`}>
-                    {notifications.map(notif => (
-                      <div key={notif.id} className="p-4 hover:bg-slate-50/10 transition flex items-center justify-between text-left">
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-extrabold uppercase bg-[#f54e00] text-white px-1.5 py-0.5 rounded-xl">{notif.type}</span>
-                          <p className="text-xs">{notif.message}</p>
-                        </div>
+                  <div className={`divide-y ${cHairline} overflow-y-auto max-h-[600px]`}>
+                    {notifications.length === 0 ? (
+                      <div className="p-16 text-center text-muted space-y-2">
+                        <span className="text-3xl block">🔔</span>
+                        <div className="text-sm font-bold text-slate-700">All alerts clear</div>
+                        <div className="text-xs text-muted">No pending blood orders or delivery notices.</div>
                       </div>
-                    ))}
+                    ) : (
+                      notifications.map(notif => {
+                        const isEmergency = notif.type === 'emergency_request' || notif.metadata?.urgency === 'emergency'
+                        const isUpdate = notif.type === 'request_response'
+                        const bg = notif.metadata?.bloodGroup
+
+                        return (
+                          <div 
+                            key={notif.id}
+                            onClick={async () => {
+                              try {
+                                await dataApi.markNotificationRead(notif.id)
+                                setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read_flag: true } : n))
+                              } catch (_) {}
+                              const reqId = notif.metadata?.requestId || (notif.type?.includes('request') || notif.type?.includes('response') ? 'br-1' : null)
+                              if (reqId) {
+                                setSelectedNotifReqId(reqId)
+                                setSelectedNotifReqObj(notif.metadata || null)
+                                setIsNotifModalOpen(true)
+                              }
+                            }}
+                            className={`p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/10 cursor-pointer transition group ${
+                              !notif.read_flag ? 'bg-rose-50/20 border-l-4 border-[#f54e00]' : ''
+                            }`}
+                          >
+                            <div className="space-y-1.5 flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                  isEmergency 
+                                    ? 'bg-rose-100 text-rose-800 animate-pulse' 
+                                    : isUpdate 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : notif.type === 'expiry_alert'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {notif.type?.replace('_', ' ')}
+                                </span>
+                                {bg && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-900 text-white font-mono">
+                                    {bg} • {notif.metadata?.unitsNeeded || 1} Units
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted font-mono">
+                                  {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+
+                              <div className="text-sm font-bold text-slate-900 group-hover:text-[#d04200] transition">
+                                {notif.title || notif.message}
+                              </div>
+
+                              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                                {notif.message}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <button
+                                type="button"
+                                className="px-4 py-2 bg-[#f54e00] hover:bg-[#d04200] text-white rounded-xl text-xs font-bold transition shadow-none flex items-center gap-1"
+                              >
+                                <span>👉</span> Open Requisition Details
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 </div>
               )}
@@ -1339,6 +1931,15 @@ export default function Hospital() {
         </main>
       </div>
 
+      {/* Global Quick Action Modal from Notification */}
+      <RequestQuickModal
+        requestId={selectedNotifReqId}
+        initialRequest={selectedNotifReqObj}
+        isOpen={isNotifModalOpen}
+        onClose={() => setIsNotifModalOpen(false)}
+        onStatusUpdated={() => loadHospitalData()}
+        currentUserRole="hospital"
+      />
     </div>
   )
 }

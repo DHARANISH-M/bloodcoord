@@ -16,7 +16,8 @@ export default function Sidebar({
     if (role === 'hospital') {
       return [
         { id: 'dashboard', label: 'Dashboard', emoji: '📊' },
-        { id: 'request_blood', label: 'Request Blood', emoji: '🩸' },
+        { id: 'cross_match', label: 'Find Compatible Blood', emoji: '🔬' },
+        { id: 'request_blood', label: 'Quick Order', emoji: '🩸' },
         { id: 'directory', label: 'Blood Banks', emoji: '🏦' },
         { id: 'history', label: 'Request History', emoji: '📋' },
         { id: 'sos', label: 'Emergency / SOS', emoji: '🚨' },
@@ -27,6 +28,7 @@ export default function Sidebar({
     if (role === 'blood_bank') {
       return [
         { id: 'dashboard', label: 'Inventory', emoji: '📊' },
+        { id: 'cross_match', label: 'Cross-Match Analysis', emoji: '🔬' },
         { id: 'requests', label: 'Hospital Requests', emoji: '📥' },
         { id: 'donors', label: 'Donor Invites', emoji: '👥' },
         { id: 'notifications', label: 'Alerts Center', emoji: '🔔', badge: unreadNotifCount }
