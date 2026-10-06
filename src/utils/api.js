@@ -161,6 +161,11 @@ export const dataApi = {
     return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status } });
   },
 
+  updateRequestStatus(requestId, status) {
+    if (USE_MOCK) return Promise.resolve(mockApi.updateRequestStatus(requestId, status));
+    return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status } });
+  },
+
   getHospitalBloodBanks(hospitalProfileId, userId) {
     if (USE_MOCK) {
       const profile = mockApi.getHospitalProfile({ id: userId, profileId: hospitalProfileId });

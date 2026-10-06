@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { generateUUID, getDistance } from '../src/utils/mockDb.js';
+import { fetchStateEraktkosh } from '../src/utils/eraktkoshClient.js';
 import { readTables, resetStore, withTables } from './store.js';
 import {
   getCompatibleDonorGroups,
@@ -66,18 +67,36 @@ function publicUser(user, state) {
   };
 }
 
-function addNotificationInState(state, userId, type, message, sentVia = ['in_app']) {
+function addNotificationInState(state, userId, type, message, sentVia = ['in_app'], metadata = {}) {
   const notification = {
     id: 'n-' + generateUUID().substring(0, 8),
     user_id: userId,
     type,
+    title: metadata.title,
     message,
     read_flag: false,
     sent_via: sentVia,
+    channels: sentVia,
+    metadata,
     created_at: new Date().toISOString(),
   };
   state.blood_notifications.push(notification);
   return notification;
+}
+
+function requestNotificationMetadata(request, hospital, bank, status = request.status || 'pending') {
+  return {
+    requestId: request.id,
+    bloodGroup: request.blood_group,
+    unitsNeeded: request.units_needed,
+    urgency: request.urgency || 'normal',
+    patientName: request.patient_name || hospital?.name || 'Hospital request',
+    contactPhone: request.contact_phone || hospital?.phone || '',
+    status,
+    hospitalName: hospital?.name || request.hospital_name || 'Hospital',
+    bloodBankName: bank?.name || request.blood_bank_name || 'Blood Centre',
+    title: `${status === 'pending' ? 'Blood Order' : 'Order ' + status.toUpperCase()} - ${request.blood_group} (${request.units_needed} Units)`,
+  };
 }
 
 function getPreferenceRecord(state, userId) {
@@ -220,6 +239,160 @@ export async function getPublicDashboard() {
     totalBanks: state.blood_banks.length,
     totalHospitals: state.blood_hospitals.length,
     totalDonors: state.blood_donors.length,
+  };
+}
+
+export async function getPublicStockAvailability() {
+  const state = await readTables(['blood_banks', 'blood_inventory']);
+  return state.blood_banks.map((bank) => {
+    const bankStock = state.blood_inventory.filter((item) => item.blood_bank_id === bank.id);
+    const stockSummary = bankStock.reduce((acc, item) => {
+      acc[item.blood_group] = (acc[item.blood_group] || 0) + Number(item.units_available || 0);
+      return acc;
+    }, {});
+
+    return {
+      ...bank,
+      stockSummary,
+    };
+  });
+}
+
+export async function getBloodBankDetail(bankId) {
+  const state = await readTables(['blood_banks', 'blood_inventory', 'blood_requests']);
+  const bank = state.blood_banks.find((item) => item.id === bankId);
+  if (!bank) throw new AppError('Blood bank not found', 404);
+
+  const inventory = state.blood_inventory.filter((item) => item.blood_bank_id === bankId);
+  const stockSummary = inventory.reduce((acc, item) => {
+    acc[item.blood_group] = (acc[item.blood_group] || 0) + Number(item.units_available || 0);
+    return acc;
+  }, {});
+  const totalUnits = Object.values(stockSummary).reduce((total, units) => total + units, 0);
+  const pendingRequestCount = state.blood_requests.filter(
+    (request) => request.blood_bank_id === bankId && request.status === 'pending'
+  ).length;
+
+  return {
+    ...bank,
+    stockSummary,
+    totalUnits,
+    inventory,
+    pendingRequestCount,
+  };
+}
+
+export async function findNearestBankForGroup(bloodGroup, lat, lng) {
+  const state = await readTables(['blood_banks', 'blood_inventory']);
+  const results = state.blood_banks
+    .map((bank) => {
+      const unitsAvailable = state.blood_inventory
+        .filter((item) => item.blood_bank_id === bank.id && item.blood_group === bloodGroup)
+        .reduce((sum, item) => sum + Number(item.units_available || 0), 0);
+
+      if (unitsAvailable <= 0) return null;
+      const distance = getDistance(Number(lat), Number(lng), bank.lat, bank.lng);
+      return {
+        ...bank,
+        unitsAvailable,
+        distance,
+        responseTime: Math.floor(distance * 3) + 12 + ' mins',
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance);
+
+  return results.slice(0, 20);
+}
+
+export async function createPublicBloodRequest(payload) {
+  return withTables(['blood_requests', 'blood_banks', 'blood_inventory', 'blood_hospitals', 'blood_notifications'], (state) => {
+    const unitsNeeded = parseInt(payload.units_needed, 10) || 1;
+    const urgency = payload.urgency || 'normal';
+    const lat = Number(payload.lat) || 28.6139;
+    const lng = Number(payload.lng) || 77.2090;
+    let targetBank = payload.blood_bank_id
+      ? state.blood_banks.find((bank) => bank.id === payload.blood_bank_id)
+      : null;
+
+    if (!targetBank) {
+      const candidates = state.blood_banks
+        .map((bank) => {
+          const stock = state.blood_inventory
+            .filter((item) => item.blood_bank_id === bank.id && item.blood_group === payload.blood_group)
+            .reduce((sum, item) => sum + Number(item.units_available || 0), 0);
+          if (stock < unitsNeeded) return null;
+          return { bank, distance: getDistance(lat, lng, bank.lat, bank.lng) };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distance - b.distance);
+
+      targetBank = candidates[0]?.bank || null;
+    }
+
+    if (!targetBank) {
+      return {
+        success: false,
+        message: `No blood bank found with sufficient stock for ${payload.blood_group}`,
+      };
+    }
+
+    const hospital = payload.hospital_id
+      ? state.blood_hospitals.find((item) => item.id === payload.hospital_id)
+      : null;
+    const request = {
+      id: 'br-' + generateUUID().substring(0, 8),
+      hospital_id: payload.hospital_id || 'public-request',
+      blood_bank_id: targetBank.id,
+      blood_group: payload.blood_group,
+      units_needed: unitsNeeded,
+      urgency,
+      patient_name: payload.patient_name || hospital?.name || 'Public Requester',
+      contact_phone: payload.contact_phone || hospital?.phone || '',
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    };
+
+    state.blood_requests.unshift(request);
+
+    const channels = urgency === 'emergency' ? ['in_app', 'sms'] : ['in_app', 'email'];
+    addNotificationInState(
+      state,
+      targetBank.user_id,
+      urgency === 'emergency' ? 'emergency_request' : 'blood_request',
+      `New blood request for ${unitsNeeded} units of ${payload.blood_group} from ${request.patient_name}. Contact: ${request.contact_phone || 'N/A'}`,
+      channels,
+      requestNotificationMetadata(request, hospital, targetBank, 'pending')
+    );
+
+    return {
+      success: true,
+      request,
+      blood_bank_name: targetBank.name,
+      blood_bank_address: targetBank.address,
+      blood_bank_phone: targetBank.phone,
+      blood_bank_district: targetBank.district,
+      blood_bank_state: targetBank.state,
+      message: `Request sent to ${targetBank.name} (${targetBank.district}, ${targetBank.state})`,
+    };
+  });
+}
+
+export async function getAdminStats() {
+  const state = await readTables(['blood_users', 'blood_banks', 'blood_hospitals', 'blood_donors', 'blood_inventory', 'blood_requests']);
+  const totalStockUnits = state.blood_inventory.reduce(
+    (sum, item) => sum + Number(item.units_available || 0),
+    0
+  );
+
+  return {
+    totalUsers: state.blood_users.length,
+    totalBanks: state.blood_banks.length,
+    totalHospitals: state.blood_hospitals.length,
+    totalDonors: state.blood_donors.length,
+    totalStockUnits,
+    totalRequests: state.blood_requests.length,
+    pendingApprovals: state.blood_users.filter((user) => user.status === 'pending').length,
   };
 }
 
@@ -413,23 +586,34 @@ export async function getBloodBankRequests(bankProfileId) {
 }
 
 export async function updateBloodRequestStatus(requestId, status) {
-  return withTables(['blood_requests', 'blood_hospitals', 'blood_notifications'], (state) => {
+  const allowedStatuses = ['pending', 'accepted', 'rejected', 'dispatched', 'fulfilled'];
+  if (!allowedStatuses.includes(status)) {
+    throw new AppError('Unsupported request status', 400);
+  }
+
+  return withTables(['blood_requests', 'blood_hospitals', 'blood_banks', 'blood_notifications'], (state) => {
     const request = state.blood_requests.find((item) => item.id === requestId);
     if (!request) throw new AppError('Request not found', 404);
 
     request.status = status;
     const hospital = state.blood_hospitals.find((item) => item.id === request.hospital_id);
+    const bank = state.blood_banks.find((item) => item.id === request.blood_bank_id);
     if (hospital) {
       addNotificationInState(
         state,
         hospital.user_id,
         'request_response',
-        `Your request for ${request.units_needed} units of ${request.blood_group} has been ${status.toUpperCase()} by the blood bank.`,
-        ['in_app', 'email']
+        `Your request for ${request.units_needed} units of ${request.blood_group} has been ${status.toUpperCase()} by ${bank?.name || 'the blood bank'}.`,
+        ['in_app', 'email'],
+        requestNotificationMetadata(request, hospital, bank, status)
       );
     }
 
-    return request;
+    return {
+      ...request,
+      hospital_name: hospital?.name,
+      blood_bank_name: bank?.name,
+    };
   });
 }
 
@@ -707,6 +891,7 @@ export async function createBloodRequest(hospitalProfileId, payload) {
   return withTables(['blood_requests', 'blood_banks', 'blood_hospitals', 'blood_notifications'], (state) => {
     const bank = state.blood_banks.find((item) => item.id === payload.blood_bank_id);
     const hospital = state.blood_hospitals.find((item) => item.id === hospitalProfileId);
+    const urgency = payload.urgency || 'normal';
 
     const request = {
       id: 'br-' + generateUUID().substring(0, 8),
@@ -714,7 +899,7 @@ export async function createBloodRequest(hospitalProfileId, payload) {
       blood_bank_id: payload.blood_bank_id,
       blood_group: payload.blood_group,
       units_needed: parseInt(payload.units_needed, 10),
-      urgency: payload.urgency,
+      urgency,
       status: 'pending',
       created_at: new Date().toISOString(),
     };
@@ -723,15 +908,16 @@ export async function createBloodRequest(hospitalProfileId, payload) {
 
     if (bank) {
       const channels = ['in_app', 'email'];
-      const prefix = payload.urgency === 'emergency' ? 'EMERGENCY ALERT: ' : '';
-      if (payload.urgency === 'emergency') channels.push('sms');
+      const prefix = urgency === 'emergency' ? 'EMERGENCY ALERT: ' : '';
+      if (urgency === 'emergency') channels.push('sms');
 
       addNotificationInState(
         state,
         bank.user_id,
-        'emergency_request',
-        `${prefix}${hospital?.name || 'A Hospital'} has raised a ${payload.urgency.toUpperCase()} request for ${payload.units_needed} units of ${payload.blood_group}.`,
-        channels
+        urgency === 'emergency' ? 'emergency_request' : 'blood_request',
+        `${prefix}${hospital?.name || 'A Hospital'} has raised a ${urgency.toUpperCase()} request for ${payload.units_needed} units of ${payload.blood_group}.`,
+        channels,
+        requestNotificationMetadata(request, hospital, bank, 'pending')
       );
     }
 
@@ -751,6 +937,33 @@ export async function getHospitalRequests(hospitalProfileId) {
         address: bank?.address || '',
       };
     });
+}
+
+export async function getRequestDetail(requestId) {
+  const state = await readTables(['blood_requests', 'blood_hospitals', 'blood_banks']);
+  const request = state.blood_requests.find((item) => item.id === requestId);
+  if (!request) throw new AppError('Request not found', 404);
+
+  const hospital = state.blood_hospitals.find((item) => item.id === request.hospital_id);
+  const bank = state.blood_banks.find((item) => item.id === request.blood_bank_id);
+
+  return {
+    ...request,
+    hospital_name: request.hospital_name || hospital?.name || 'Medical Center Requisition',
+    hospital_address: hospital?.address || 'Medical District',
+    hospital_phone: hospital?.phone || request.contact_phone || '+91 1800-11-2026',
+    hospital_district: hospital?.district || 'Central',
+    hospital_state: hospital?.state || 'Delhi',
+    hospital_lat: hospital?.lat || 28.5672,
+    hospital_lng: hospital?.lng || 77.21,
+    blood_bank_name: request.blood_bank_name || bank?.name || 'Regional Blood Centre',
+    blood_bank_address: bank?.address || 'Central Blood Bank Facility',
+    blood_bank_phone: bank?.phone || '+91 11-23716441',
+    blood_bank_district: bank?.district || 'Central',
+    blood_bank_state: bank?.state || 'Delhi',
+    blood_bank_lat: bank?.lat || 28.6139,
+    blood_bank_lng: bank?.lng || 77.209,
+  };
 }
 
 export async function getHospitalPreferences(userId) {
@@ -920,6 +1133,54 @@ export async function runExpiryCheckCron() {
   });
 }
 
+export async function syncEraktkoshLive(stateCode = '97') {
+  const freshBanks = await fetchStateEraktkosh(stateCode);
+  if (!freshBanks || freshBanks.length === 0) {
+    return { success: false, message: 'Sync failed or no records returned' };
+  }
+
+  return withTables(['blood_banks', 'blood_inventory'], (state) => {
+    let updatedBanks = 0;
+    let updatedInventory = 0;
+
+    freshBanks.forEach((fresh) => {
+      const existingIndex = state.blood_banks.findIndex(
+        (bank) => bank.name?.toLowerCase() === fresh.name?.toLowerCase() && bank.state === fresh.state
+      );
+
+      if (existingIndex === -1) return;
+
+      const bank = {
+        ...state.blood_banks[existingIndex],
+        ...fresh,
+        id: state.blood_banks[existingIndex].id,
+        user_id: state.blood_banks[existingIndex].user_id,
+      };
+      state.blood_banks[existingIndex] = bank;
+      updatedBanks++;
+
+      Object.entries(fresh.stockSummary || {}).forEach(([bloodGroup, units]) => {
+        const inventoryItem = state.blood_inventory.find(
+          (item) => item.blood_bank_id === bank.id && item.blood_group === bloodGroup
+        );
+        if (!inventoryItem) return;
+
+        inventoryItem.units_available = Number(units) || 0;
+        inventoryItem.updated_at = new Date().toISOString();
+        updatedInventory++;
+      });
+    });
+
+    return {
+      success: true,
+      count: freshBanks.length,
+      updatedBanks,
+      updatedInventory,
+      state: freshBanks[0]?.state || 'State',
+    };
+  });
+}
+
 export async function getNotifications(userId) {
   const { blood_notifications: notifications } = await readTables(['blood_notifications']);
   return notifications
@@ -936,9 +1197,18 @@ export async function markNotificationRead(notificationId) {
   });
 }
 
-export async function addNotification(userId, type, message, sentVia = ['in_app']) {
+export async function markAllNotificationsRead(userId) {
   return withTables(['blood_notifications'], (state) => {
-    return addNotificationInState(state, userId, type, message, sentVia);
+    state.blood_notifications.forEach((notification) => {
+      if (notification.user_id === userId) notification.read_flag = true;
+    });
+    return { success: true };
+  });
+}
+
+export async function addNotification(userId, type, message, sentVia = ['in_app'], metadata = {}) {
+  return withTables(['blood_notifications'], (state) => {
+    return addNotificationInState(state, userId, type, message, sentVia, metadata);
   });
 }
 

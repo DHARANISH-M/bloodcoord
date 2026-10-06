@@ -33,8 +33,17 @@ app.post('/api/auth/login', route(async (req) => {
 }));
 
 app.get('/api/dashboard/public', route(async () => domain.getPublicDashboard()));
+app.get('/api/dashboard/stock', route(async () => domain.getPublicStockAvailability()));
+
+app.get('/api/blood-banks/nearest', route(async (req) => {
+  return domain.findNearestBankForGroup(req.query.bloodGroup, req.query.lat, req.query.lng);
+}));
+app.get('/api/blood-banks/:bankId/detail', route(async (req) => {
+  return domain.getBloodBankDetail(req.params.bankId);
+}));
 
 app.get('/api/admin/users', route(async () => domain.getAdminUsers()));
+app.get('/api/admin/stats', route(async () => domain.getAdminStats()));
 app.patch('/api/admin/users/:userId/status', route(async (req) => {
   return domain.updateUserStatus(req.params.userId, req.body.status);
 }));
@@ -122,21 +131,31 @@ app.patch('/api/donation-offers/:offerId/status', route(async (req) => {
   return domain.respondToOffer(req.params.offerId, req.body.status);
 }));
 
+app.post('/api/blood-requests/public', route(async (req) => {
+  return domain.createPublicBloodRequest(req.body);
+}));
 app.patch('/api/blood-requests/:requestId/status', route(async (req) => {
   return domain.updateBloodRequestStatus(req.params.requestId, req.body.status);
+}));
+app.get('/api/requests/:requestId', route(async (req) => {
+  return domain.getRequestDetail(req.params.requestId);
 }));
 
 app.get('/api/users/:userId/notifications', route(async (req) => {
   return domain.getNotifications(req.params.userId);
 }));
 app.post('/api/notifications', route(async (req) => {
-  return domain.addNotification(req.body.userId, req.body.type, req.body.message, req.body.sentVia);
+  return domain.addNotification(req.body.userId, req.body.type, req.body.message, req.body.sentVia, req.body.metadata);
 }));
 app.patch('/api/notifications/:notificationId/read', route(async (req) => {
   return domain.markNotificationRead(req.params.notificationId);
 }));
+app.patch('/api/users/:userId/notifications/read-all', route(async (req) => {
+  return domain.markAllNotificationsRead(req.params.userId);
+}));
 
 app.post('/api/cron/expiry-check', route(async () => domain.runExpiryCheckCron()));
+app.post('/api/eraktkosh/sync', route(async (req) => domain.syncEraktkoshLive(req.body.stateCode)));
 app.post('/api/dev/reset', route(async () => domain.resetAllData()));
 
 app.use((error, _req, res, _next) => {

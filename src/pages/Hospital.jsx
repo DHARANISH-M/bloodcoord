@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { mockApi, getDistance } from '../utils/mockDb'
 import { dataApi } from '../utils/api'
 import MapView from '../components/MapView'
 import Sidebar from '../components/Sidebar'
@@ -105,39 +104,25 @@ export default function Hospital() {
   ])
 
   // Load baseline profile & directory details
-  const loadData = () => {
+  const loadData = async () => {
+    if (!user) return
     try {
-      const profile = mockApi.getHospitalProfile(user)
+      const profile = await dataApi.getHospitalProfile(user)
       if (profile) {
         setHospitalInfo(profile)
         setProfileName(profile.name)
         setProfileAddress(profile.address)
         setProfilePhone(user.phone || '+91 11-26588500')
 
-        // Set requests log
-        const reqList = mockApi.getHospitalRequests(profile.id)
+        const [reqList, banksList, donorsList, notifList] = await Promise.all([
+          dataApi.getHospitalRequests(profile.id),
+          dataApi.getHospitalBloodBanks(profile.id, user.id),
+          dataApi.getNearbyDonors(profile.lat, profile.lng, 15),
+          dataApi.getNotifications(user.id)
+        ])
         setRequests(reqList)
-
-        // Load blood banks with stock from in-memory database
-        const allBanksWithStock = mockApi.getPublicStockAvailability()
-        const mappedBanks = allBanksWithStock.map(b => {
-          const distance = getDistance(profile.lat, profile.lng, b.lat, b.lng)
-          return {
-            ...b,
-            distance,
-            responseTime: Math.floor(distance * 3) + 12 + ' mins',
-            isPreferred: preferredBanks.includes(b.id)
-          }
-        }).sort((a, b) => a.distance - b.distance)
-
-        setBloodBanks(mappedBanks)
-
-        // Donors
-        const donors = mockApi.getNearbyDonors(profile.lat, profile.lng, 15)
-        setNearbyDonors(donors)
-
-        // Notifications
-        const notifList = mockApi.getNotifications(user.id)
+        setBloodBanks(banksList || [])
+        setNearbyDonors(donorsList || [])
         setNotifications(notifList)
       }
     } catch (e) {
@@ -174,12 +159,12 @@ export default function Hospital() {
           setSosRespondersList(prev => [...prev, potentialResponders[prev.length]])
           
           const randomResponder = potentialResponders[c]
-          mockApi.addNotification(
+          dataApi.addNotification(
             user.id,
             'emergency_request',
             `SOS RESPONDED: ${randomResponder.name} is coordinating supply matching for your urgent alert.`,
             ['in_app', 'sms']
-          )
+          ).catch(console.error)
           
           return nextCount
         })
@@ -189,14 +174,14 @@ export default function Hospital() {
       setSosRespondersList([])
     }
     return () => clearInterval(timer)
-  }, [sosSent])
+  }, [sosSent, user])
 
   const triggerToast = (msgText) => {
     setSuccessToast(msgText)
     setTimeout(() => setSuccessToast(null), 4000)
   }
 
-  const handleTogglePreferred = (bankId) => {
+  const handleTogglePreferred = async (bankId) => {
     let updated
     if (preferredBanks.includes(bankId)) {
       updated = preferredBanks.filter(id => id !== bankId)
@@ -205,7 +190,12 @@ export default function Hospital() {
     }
     setPreferredBanks(updated)
     localStorage.setItem('hosp_preferred_banks', JSON.stringify(updated))
-    triggerToast('Bank preferences updated successfully.')
+    try {
+      if (user) await dataApi.updateHospitalPreferences(user.id, updated)
+      triggerToast('Bank preferences updated successfully.')
+    } catch (e) {
+      triggerToast(e.message || 'Could not update bank preferences.')
+    }
   }
 
   // Reactive Quick Order Matching: Automatically compute nearby available banks
@@ -324,10 +314,10 @@ export default function Hospital() {
     setMatchedBanks(matched)
   }
 
-  const handleSendRequest = (bank) => {
+  const handleSendRequest = async (bank) => {
     if (!hospitalInfo) return
     try {
-      mockApi.createBloodRequest(hospitalInfo.id, {
+      await dataApi.createBloodRequest(hospitalInfo.id, {
         blood_bank_id: bank.id,
         blood_group: reqBloodGroup,
         units_needed: parseInt(reqUnits),
@@ -337,7 +327,7 @@ export default function Hospital() {
       triggerToast(`Request dispatched to ${bank.name} for ${reqUnits} units of ${reqBloodGroup} [${reqUrgency}].`)
       
       setReqCaseId('')
-      loadData()
+      await loadData()
       setActiveTab('history')
     } catch (e) {
       alert(e.message)
@@ -345,9 +335,9 @@ export default function Hospital() {
   }
 
   // Open the request blood tab pre-targeted at a specific bank
-  const handleOpenBankDetail = (bank) => {
+  const handleOpenBankDetail = async (bank) => {
     try {
-      const detail = mockApi.getBloodBankDetail(bank.id)
+      const detail = await dataApi.getBloodBankDetail(bank.id)
       setDetailBank(detail ? { ...detail, distance: bank.distance, responseTime: bank.responseTime, isPreferred: bank.isPreferred } : bank)
     } catch (e) {
       setDetailBank(bank)
@@ -363,12 +353,12 @@ export default function Hospital() {
     setActiveTab('request_blood')
   }
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!cancelModalItem) return
     try {
-      mockApi.updateRequestStatus(cancelModalItem.id, 'rejected')
+      await dataApi.updateRequestStatus(cancelModalItem.id, 'rejected')
       
-      mockApi.addNotification(
+      await dataApi.addNotification(
         user.id,
         'request_response',
         `Order ${cancelModalItem.id.substring(0, 8)} cancelled successfully.`,
@@ -376,19 +366,19 @@ export default function Hospital() {
       )
       triggerToast('Request cancelled successfully.')
       setCancelModalItem(null)
-      loadData()
+      await loadData()
     } catch (e) {
       console.error(e)
     }
   }
 
-  const handleSendSos = (e) => {
+  const handleSendSos = async (e) => {
     e.preventDefault()
     setSosSent(true)
     setSosRespondersCount(0)
     setSosRespondersList([])
     
-    mockApi.addNotification(
+    await dataApi.addNotification(
       user.id,
       'emergency_request',
       `🚨 EMERGENCY SOS BROADCAST Dispatched: Urgent need of ${sosUnits} units of ${sosBloodGroup} transmitted to Twilio SMS gateway.`,
@@ -397,26 +387,27 @@ export default function Hospital() {
     triggerToast('Emergency SOS broadcast successfully transmitted!')
   }
 
-  const handleMarkAllNotificationsRead = () => {
-    notifications.forEach(n => {
-      mockApi.markNotificationRead(n.id)
-    })
-    loadData()
+  const handleMarkAllNotificationsRead = async () => {
+    if (!user) return
+    await dataApi.markAllNotificationsRead(user.id)
+    setNotifications(prev => prev.map(n => ({ ...n, read_flag: true })))
     triggerToast('All notifications marked as read.')
   }
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault()
     try {
-      // Update via mockApi internal tables
-      const hospitals = mockApi.getAdminUsers ? [] : [] // fallback
-      // Direct memory update
       if (hospitalInfo) {
-        hospitalInfo.name = profileName
-        hospitalInfo.address = profileAddress
+        const updated = await dataApi.updateHospitalProfile(hospitalInfo.id, {
+          userId: user.id,
+          name: profileName,
+          address: profileAddress,
+          phone: profilePhone
+        })
+        setHospitalInfo(updated)
       }
       setEditMode(false)
-      loadData()
+      await loadData()
       triggerToast('Profile updated successfully.')
     } catch (e) {
       console.error(e)
@@ -1823,7 +1814,7 @@ export default function Hospital() {
                                 await dataApi.markNotificationRead(notif.id)
                                 setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read_flag: true } : n))
                               } catch (_) {}
-                              const reqId = notif.metadata?.requestId || (notif.type?.includes('request') || notif.type?.includes('response') ? 'br-1' : null)
+                              const reqId = notif.metadata?.requestId || null
                               if (reqId) {
                                 setSelectedNotifReqId(reqId)
                                 setSelectedNotifReqObj(notif.metadata || null)
@@ -1937,7 +1928,7 @@ export default function Hospital() {
         initialRequest={selectedNotifReqObj}
         isOpen={isNotifModalOpen}
         onClose={() => setIsNotifModalOpen(false)}
-        onStatusUpdated={() => loadHospitalData()}
+        onStatusUpdated={() => loadData()}
         currentUserRole="hospital"
       />
     </div>

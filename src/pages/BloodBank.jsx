@@ -779,7 +779,7 @@ export default function BloodBank(){
                             await dataApi.markNotificationRead(notif.id)
                             setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read_flag: true } : n))
                           } catch (_) {}
-                          const reqId = notif.metadata?.requestId || (notif.type?.includes('request') ? 'br-1' : null)
+                          const reqId = notif.metadata?.requestId || null
                           if (reqId) {
                             setSelectedNotifReqId(reqId)
                             setSelectedNotifReqObj(notif.metadata || null)

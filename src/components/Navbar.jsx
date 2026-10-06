@@ -61,7 +61,7 @@ export default function Navbar(){
 
   const handleNotificationClick = (notif) => {
     handleMarkRead(notif.id)
-    const reqId = notif.metadata?.requestId || (notif.type?.includes('request') || notif.type?.includes('response') ? 'br-1' : null)
+    const reqId = notif.metadata?.requestId || null
     if (reqId) {
       setSelectedReqId(reqId)
       setSelectedReqObj(notif.metadata || null)

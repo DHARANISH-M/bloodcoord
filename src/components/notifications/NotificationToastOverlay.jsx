@@ -27,7 +27,8 @@ export default function NotificationToastOverlay({ currentUserRole = 'hospital' 
   }, [])
 
   const handleOpenFromToast = (notif) => {
-    const reqId = notif.metadata?.requestId || (notif.type.includes('request') ? 'br-1' : null)
+    const reqId = notif.metadata?.requestId || null
+    if (!reqId) return
     setSelectedReqId(reqId)
     setSelectedReqObj(notif.metadata || null)
     setIsModalOpen(true)
