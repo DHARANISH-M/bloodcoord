@@ -517,92 +517,120 @@ export default function Hospital() {
 
       {/* BLOOD BANK DETAIL MODAL */}
       {detailBank && (
-        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDetailBank(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setDetailBank(null)}>
+          <div className="bg-surface-card border border-hairline rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col text-left" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="p-6 border-b border-slate-100 sticky top-0 bg-white rounded-t-3xl z-10">
+            <div className="p-6 border-b border-hairline sticky top-0 bg-surface-card/95 backdrop-blur rounded-t-3xl z-20">
               <div className="flex justify-between items-start gap-4">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-black text-slate-900 leading-snug">{detailBank.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{detailBank.address}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className={`inline-flex text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                      detailBank.category?.toLowerCase().includes('govt')
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : detailBank.category?.toLowerCase().includes('charit')
-                        ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                        : 'bg-blue-50 text-blue-700 border border-blue-200'
-                    }`}>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <h3 className="text-lg font-bold text-ink leading-snug">{detailBank.name}</h3>
+                  <p className="text-xs text-muted line-clamp-1">{detailBank.address?.replace(/,\s*,/g, ',')}</p>
+                  
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#f54e00] bg-[#f54e00]/10 border border-[#f54e00]/20 px-2.5 py-0.5 rounded-full font-mono">
                       {detailBank.category || 'Govt.'}
                     </span>
-                    <span className="text-[10px] font-semibold text-slate-500">{detailBank.district}, {detailBank.state}</span>
+                    <span className="text-xs text-muted font-medium">{detailBank.district}, {detailBank.state}</span>
                     {detailBank.distance != null && (
-                      <span className="text-[10px] font-bold text-[#d04200] bg-[#f54e00]/10 px-2 py-0.5 rounded-full">
-                        {Number(detailBank.distance).toFixed(1)} km away
+                      <span className="text-[10px] font-bold text-ink bg-canvas border border-hairline px-2.5 py-0.5 rounded-full">
+                        📍 {Number(detailBank.distance).toFixed(1)} km away
                       </span>
                     )}
                   </div>
                 </div>
-                <button onClick={() => setDetailBank(null)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 transition text-sm">✕</button>
+                
+                <button
+                  onClick={() => setDetailBank(null)}
+                  className="w-8 h-8 rounded-full bg-canvas border border-hairline hover:bg-slate-100 dark:hover:bg-slate-800 text-muted hover:text-ink flex items-center justify-center transition shrink-0 text-xs font-bold"
+                  title="Close modal"
+                >
+                  ✕
+                </button>
               </div>
             </div>
 
-            {/* Contact Info */}
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
-              <div className="grid grid-cols-2 gap-4 text-xs">
+            {/* Contact Info Strip */}
+            <div className="px-6 py-4 bg-canvas/50 border-b border-hairline">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Phone</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.phone || 'N/A'}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted block">Phone</span>
+                  <p className="font-mono font-bold text-ink mt-0.5 truncate">{detailBank.phone || 'N/A'}</p>
                 </div>
                 <div>
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Email</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.email || 'N/A'}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted block">Email</span>
+                  <p className="font-medium text-ink mt-0.5 truncate" title={detailBank.email}>{detailBank.email || 'N/A'}</p>
                 </div>
                 <div>
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Type</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.type || 'Blood Bank'}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted block">Type</span>
+                  <p className="font-medium text-ink mt-0.5 truncate">{detailBank.type || 'Blood Bank'}</p>
                 </div>
                 <div>
-                  <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Est. Response</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">{detailBank.responseTime || 'N/A'}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted block">Est. Response</span>
+                  <p className="font-medium text-ink mt-0.5 truncate">~{detailBank.responseTime || '15 mins'}</p>
                 </div>
               </div>
             </div>
 
             {/* Stock Breakdown Grid */}
-            <div className="px-6 py-5">
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Live Blood Stock</h4>
-                <span className="text-sm font-black text-[#d04200]">{detailBank.totalUnits || Object.values(detailBank.stockSummary || {}).reduce((a, b) => a + b, 0)} Total Units</span>
+            <div className="p-6 space-y-3.5">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#f54e00] animate-pulse"></span>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-ink">Live Blood Stock</h4>
+                </div>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#f54e00]/10 text-[#f54e00] border border-[#f54e00]/20 font-mono">
+                  {detailBank.totalUnits || Object.values(detailBank.stockSummary || {}).reduce((a, b) => a + b, 0)} Total Units
+                </span>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+
+              <div className="grid grid-cols-4 gap-2.5">
                 {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(bg => {
-                  const count = detailBank.stockSummary?.[bg] || 0
-                  const pct = Math.min(100, Math.round((count / 30) * 100))
+                  const count = detailBank.stockSummary?.[bg] || 0;
+                  const pct = Math.min(100, Math.round((count / 30) * 100));
+                  const hasStock = count > 0;
+                  
                   return (
-                    <div key={bg} className="border border-slate-200 rounded-xl p-3 text-center bg-white hover:shadow-md transition">
-                      <div className="text-lg font-black text-[#d04200]">{bg}</div>
-                      <div className="text-xl font-black text-slate-900 mt-1">{count}</div>
-                      <div className="text-[10px] text-slate-500 font-semibold">units</div>
-                      <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div
+                      key={bg}
+                      className={`rounded-2xl p-3 text-center transition-all flex flex-col justify-between ${
+                        hasStock
+                          ? 'bg-surface-card border border-hairline hover:border-slate-300 dark:hover:border-slate-700 shadow-xs'
+                          : 'bg-canvas/30 border border-hairline/60 opacity-40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-sm font-black font-mono ${hasStock ? 'text-ink' : 'text-muted'}`}>{bg}</span>
+                        {hasStock && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        )}
+                      </div>
+                      <div className="my-1.5">
+                        <span className={`text-2xl font-black font-mono leading-none ${hasStock ? 'text-[#f54e00]' : 'text-muted'}`}>
+                          {count}
+                        </span>
+                        <span className="text-[10px] text-muted font-medium ml-1">u</span>
+                      </div>
+                      <div className="w-full bg-canvas border border-hairline/60 h-1.5 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all ${count > 10 ? 'bg-emerald-500' : count > 0 ? 'bg-amber-500' : 'bg-slate-200'}`}
+                          className={`h-full rounded-full transition-all ${count > 10 ? 'bg-emerald-500' : hasStock ? 'bg-[#f54e00]' : 'bg-transparent'}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
 
             {/* Inventory Batch Table */}
             {detailBank.inventory && detailBank.inventory.length > 0 && (
-              <div className="px-6 pb-4">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 mb-3">Inventory Batches</h4>
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <div className="px-6 pb-6 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+                  <span>📦</span> Verified FEFO Batches
+                </h4>
+                <div className="overflow-x-auto rounded-2xl border border-hairline bg-surface-card">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
+                    <thead className="bg-canvas border-b border-hairline text-muted text-[10px] font-bold uppercase tracking-wider">
                       <tr>
                         <th className="px-4 py-2.5 text-left">Group</th>
                         <th className="px-4 py-2.5 text-left">Units</th>
@@ -610,15 +638,17 @@ export default function Hospital() {
                         <th className="px-4 py-2.5 text-left">Expiry</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-hairline text-ink">
                       {detailBank.inventory.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-50 transition">
+                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                           <td className="px-4 py-2.5">
-                            <span className="inline-flex items-center justify-center font-black text-xs w-8 h-8 rounded-full bg-[#f54e00]/10 text-[#d04200]">{item.blood_group}</span>
+                            <span className="inline-flex items-center justify-center font-black text-xs font-mono px-2 py-0.5 rounded-md bg-[#f54e00]/10 text-[#f54e00] border border-[#f54e00]/20">
+                              {item.blood_group}
+                            </span>
                           </td>
-                          <td className="px-4 py-2.5 font-bold text-slate-800">{item.units_available}</td>
-                          <td className="px-4 py-2.5 font-mono text-slate-600">{item.batch_id}</td>
-                          <td className="px-4 py-2.5 text-slate-600">{item.expiry_date}</td>
+                          <td className="px-4 py-2.5 font-bold font-mono text-ink">{item.units_available} units</td>
+                          <td className="px-4 py-2.5 font-mono text-muted text-[11px]">{item.batch_id}</td>
+                          <td className="px-4 py-2.5 font-mono text-ink text-[11px]">{item.expiry_date}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -628,18 +658,28 @@ export default function Hospital() {
             )}
 
             {/* Action Footer */}
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex justify-between items-center">
-              <div className="text-[10px] text-slate-400 font-semibold">
-                {detailBank.isPreferred ? '⭐ Preferred blood bank' : 'Click ☆ on the card to mark as preferred'}
+            <div className="sticky bottom-0 bg-surface-card/95 backdrop-blur px-6 py-4 border-t border-hairline rounded-b-3xl flex items-center justify-between z-20">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleTogglePreferred(detailBank.id)}
+                  className="p-1.5 rounded-lg bg-canvas border border-hairline hover:bg-slate-100 dark:hover:bg-slate-800 text-xs transition"
+                  title={detailBank.isPreferred ? "Remove favorite" : "Mark favorite"}
+                >
+                  {detailBank.isPreferred ? '⭐' : '☆'}
+                </button>
+                <span className="text-xs text-muted font-medium hidden sm:inline">
+                  {detailBank.isPreferred ? 'Marked as Preferred Center' : 'Add to Preferred Centers'}
+                </span>
               </div>
               <button
                 onClick={() => {
-                  setDetailBank(null)
-                  handleOpenRequest(detailBank)
+                  setDetailBank(null);
+                  handleOpenRequest(detailBank);
                 }}
-                className="px-5 py-2.5 bg-[#f54e00] hover:bg-[#d04200] text-white text-xs font-black rounded-xl transition uppercase tracking-wider"
+                className="h-10 px-5 bg-[#f54e00] hover:bg-[#d04200] active:scale-95 text-white font-bold text-xs rounded-xl uppercase tracking-wide transition shadow-sm hover:shadow flex items-center justify-center gap-1.5 leading-none"
               >
-                🩸 Request Blood
+                <span className="leading-none">🩸</span>
+                <span className="leading-none">Request Blood</span>
               </button>
             </div>
           </div>
@@ -1107,7 +1147,11 @@ export default function Hospital() {
             </div>
           )}{/* DYNAMIC MIDDLE COLUMN CONTENT FOR TABS OTHER THAN DASHBOARD */}
           {activeTab !== 'dashboard' && (
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className={`flex-1 ${
+              activeTab === 'cross_match'
+                ? 'h-full min-h-0 p-6 flex flex-col overflow-y-auto lg:overflow-hidden'
+                : 'overflow-y-auto p-6 space-y-6'
+            }`}>
               
               {/* TAB: FIND COMPATIBLE BLOOD / CROSS-MATCH ENGINE */}
               {activeTab === 'cross_match' && (
@@ -1155,8 +1199,8 @@ export default function Hospital() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    <div className={`${cCard} border p-6 rounded-xl shadow-sm space-y-6 lg:col-span-5`}>
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    <div className={`${cCard} border p-6 rounded-2xl shadow-sm space-y-6 lg:col-span-5 self-start sticky top-4`}>
                       <div className="text-left border-b border-hairline pb-3">
                         <div className="flex items-center gap-2">
                           <span className="text-base">🩸</span>
@@ -1269,67 +1313,91 @@ export default function Hospital() {
 
                     <div className="lg:col-span-7 space-y-6">
                       {/* Matching list card */}
-                      <div className={`${cCard} border rounded-xl shadow-sm overflow-hidden flex flex-col justify-between`}>
+                      <div className={`${cCard} border rounded-2xl shadow-sm overflow-hidden flex flex-col justify-between`}>
                         <div>
-                          <div className={`px-6 py-4 border-b ${isDarkMode ? 'bg-surface-card border-hairline' : 'bg-slate-50 border-hairline'} flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2`}>
+                          <div className={`px-6 py-4 border-b ${isDarkMode ? 'bg-surface-card border-hairline' : 'bg-slate-50/80 border-hairline'} flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2`}>
                             <div>
-                              <span className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                                Nearby Available Centres • {reqBloodGroup}
-                              </span>
-                              <p className={`text-[10px] ${cBodyText} mt-0.5`}>
-                                Found {matchedBanks.length} nearby centres {reqRadius !== 'all' ? `within ${reqRadius} km` : ''} sorted by distance.
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-[#f54e00] animate-pulse"></span>
+                                <span className="text-xs font-bold uppercase tracking-wider text-ink">
+                                  Nearby Available Centres • <strong className="text-[#f54e00] font-black">{reqBloodGroup}</strong>
+                                </span>
+                              </div>
+                              <p className={`text-[11px] ${cBodyText} mt-0.5`}>
+                                Found {matchedBanks.length} supply centres {reqRadius !== 'all' ? `within ${reqRadius} km` : ''} sorted by distance.
                               </p>
                             </div>
-                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-50 text-[#d04200] border border-rose-200 uppercase font-mono shrink-0">
-                              {matchedBanks.length} centres
+                            <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#f54e00]/10 text-[#f54e00] border border-[#f54e00]/20 font-mono shrink-0">
+                              {matchedBanks.length} Centres
                             </span>
                           </div>
 
-                          <div className={`divide-y ${cHairline} max-h-[380px] overflow-y-auto`}>
+                          <div className="p-3.5 space-y-2.5 max-h-[440px] overflow-y-auto custom-scrollbar">
                             {matchedBanks.length === 0 ? (
-                              <div className={`p-12 text-center ${cBodyText} text-xs space-y-2`}>
+                              <div className={`p-12 text-center ${cBodyText} text-xs space-y-2 bg-canvas/40 rounded-xl border border-dashed border-hairline`}>
                                 <div className="text-3xl">🔍</div>
-                                <div className="font-bold text-ink">No nearby blood banks found with {reqBloodGroup} stock.</div>
-                                <div className="text-[11px] text-body max-w-sm mx-auto">
-                                  Try expanding the proximity radius to 100 km or click "All Dist" to find matching stock further away.
+                                <div className="font-bold text-ink text-sm">No nearby blood banks found with {reqBloodGroup} stock.</div>
+                                <div className="text-xs text-muted max-w-sm mx-auto">
+                                  Try expanding the proximity radius to 100 km or select "All Dist" to search wider supply centers.
                                 </div>
                               </div>
                             ) : (
                               matchedBanks.map(bank => {
-                                const hasEnough = bank.unitsAvail >= parseInt(reqUnits || '1')
+                                const hasEnough = bank.unitsAvail >= parseInt(reqUnits || '1');
                                 return (
-                                  <div key={bank.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 hover:bg-slate-50/50 transition">
-                                    <div className="text-left space-y-1 min-w-0 flex-1">
-                                      <div className="font-extrabold text-sm flex items-center space-x-1.5 truncate">
+                                  <div
+                                    key={bank.id}
+                                    className="p-4 rounded-xl border border-hairline bg-surface-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3.5"
+                                  >
+                                    <div className="text-left space-y-1.5 min-w-0 flex-1">
+                                      <div className="font-bold text-sm text-ink flex items-center gap-1.5 truncate">
                                         <span className="truncate">{bank.name}</span>
-                                        {bank.isPreferred && <span className="text-xs text-amber-500 shrink-0">★</span>}
+                                        {bank.isPreferred && (
+                                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-1.5 py-0.2 rounded shrink-0">
+                                            ★ Preferred
+                                          </span>
+                                        )}
                                       </div>
-                                      <div className={`text-xs ${cBodyText} truncate`}>{bank.address}</div>
-                                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono text-body">
-                                        <span className="font-bold text-[#f54e00]">{bank.district}</span>
-                                        <span>•</span>
-                                        <span className="font-semibold">{bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km away</span>
-                                        <span>•</span>
-                                        <span>ETA ~{bank.responseTime}</span>
+                                      <p className="text-[11px] text-muted truncate">{bank.address}</p>
+                                      
+                                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#f54e00]/10 text-[#f54e00] border border-[#f54e00]/20">
+                                          📍 {bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km away
+                                        </span>
+                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-canvas border border-hairline text-slate-700 dark:text-slate-300">
+                                          ⏱️ ETA ~{bank.responseTime}
+                                        </span>
+                                        <span className="text-[10px] font-medium text-muted px-1.5 py-0.5">
+                                          {bank.district}
+                                        </span>
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                                    <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-hairline/60">
                                       <div className="text-left sm:text-right">
-                                        <div className="text-base font-black text-[#f54e00]">{bank.unitsAvail} units</div>
-                                        <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                          hasEnough ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        <div className="text-base font-black font-mono text-ink leading-tight">
+                                          {bank.unitsAvail} <span className="text-[10px] font-normal text-muted">units</span>
+                                        </div>
+                                        <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md mt-1 ${
+                                          hasEnough
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
+                                            : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50'
                                         }`}>
                                           {hasEnough ? '✓ Sufficient' : `⚠️ Partial (${bank.unitsAvail}/${reqUnits})`}
                                         </span>
                                       </div>
-                                      <CustomButton onClick={() => handleSendRequest(bank)} className="px-4 py-2 text-[10px]">
-                                        Send Order
-                                      </CustomButton>
+                                      
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSendRequest(bank)}
+                                        className="h-9 px-4 bg-[#f54e00] hover:bg-[#d04200] active:scale-95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition uppercase tracking-wide flex items-center justify-center gap-1.5 shrink-0 leading-none"
+                                      >
+                                        <span className="text-xs leading-none select-none flex items-center">🩸</span>
+                                        <span className="leading-none flex items-center">Send Order</span>
+                                      </button>
                                     </div>
                                   </div>
-                                )
+                                );
                               })
                             )}
                           </div>
@@ -1544,86 +1612,101 @@ export default function Hospital() {
                         return (
                           <div 
                             key={bank.id} 
-                            className="bg-surface-card border border-hairline p-5 rounded-xl shadow-none flex flex-col justify-between min-h-[220px] text-left cursor-pointer hover:shadow-md hover:border-slate-300 transition group" 
+                            className="bg-surface-card border border-hairline hover:border-slate-300 dark:hover:border-slate-700 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[260px] text-left cursor-pointer group" 
                             onClick={() => handleOpenBankDetail(bank)}
                           >
-                            <div>
-                              {/* Heading Name & Preferred button */}
-                              <div className="flex justify-between items-start gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <h4 className="text-sm font-bold text-ink truncate group-hover:text-[#d04200] transition" title={bank.name}>
-                                    {bank.name}
-                                  </h4>
-                                  <div className="flex items-center gap-1.5 mt-1">
-                                    <span className="text-[10px] text-[#f54e00] font-bold uppercase tracking-wider font-mono">
-                                      {bank.district}
-                                    </span>
-                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold uppercase">
-                                      {bank.category || 'Govt.'}
-                                    </span>
-                                  </div>
+                            <div className="space-y-3">
+                              {/* Header: Tags & Online Status / Star */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#f54e00] bg-[#f54e00]/10 border border-[#f54e00]/20 px-2 py-0.5 rounded-md font-mono">
+                                    {bank.district}
+                                  </span>
+                                  <span className="text-[10px] font-semibold text-muted bg-canvas border border-hairline px-2 py-0.5 rounded-md">
+                                    {bank.category || 'Govt.'}
+                                  </span>
                                 </div>
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleTogglePreferred(bank.id) }}
-                                  className="p-1.5 rounded-lg text-xs bg-canvas border border-hairline hover:bg-surface-card transition"
-                                >
-                                  {bank.isPreferred ? '⭐' : '☆'}
-                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                                    isOnline 
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50' 
+                                      : 'bg-slate-100 text-slate-500 border border-slate-200'
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                                    {isOnline ? 'Online' : 'Offline'}
+                                  </span>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleTogglePreferred(bank.id); }}
+                                    className="p-1 rounded-lg text-xs bg-canvas border border-hairline hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                                    title={bank.isPreferred ? "Remove favorite" : "Mark favorite"}
+                                  >
+                                    {bank.isPreferred ? '⭐' : '☆'}
+                                  </button>
+                                </div>
                               </div>
 
-                              {/* Subheading Address */}
-                              <p className="text-xs text-body mt-2.5 truncate" title={bank.address}>
-                                {bank.address}
-                              </p>
+                              {/* Title & Address */}
+                              <div>
+                                <h4 className="text-sm font-bold text-ink truncate group-hover:text-[#f54e00] transition" title={bank.name}>
+                                  {bank.name}
+                                </h4>
+                                <p className="text-[11px] text-muted truncate mt-0.5" title={bank.address}>
+                                  {bank.address}
+                                </p>
+                              </div>
 
-                              {/* Status and Distance Row */}
-                              <div className="flex items-center space-x-2 text-[10px] text-body font-mono mt-3.5">
-                                <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-[#5db872]' : 'bg-slate-300'}`}></span>
-                                <span>{isOnline ? 'Online' : 'Offline'}</span>
+                              {/* Distance & ETA */}
+                              <div className="flex items-center gap-2 text-xs text-muted">
+                                <span className="font-bold text-[#f54e00]">📍 {bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km</span>
                                 <span>•</span>
-                                <span className="font-bold text-ink">{bank.distance != null ? Number(bank.distance).toFixed(1) : '0.0'} km away</span>
-                                <span>•</span>
-                                <span>~{bank.responseTime}</span>
+                                <span>⏱️ ~{bank.responseTime}</span>
                               </div>
 
-                              {/* Mini stock badges */}
-                              <div className="mt-3 flex flex-wrap gap-1">
-                                {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(bg => {
-                                  const cnt = bank.stockSummary?.[bg] || 0
-                                  if (cnt <= 0) return null
-                                  return (
-                                    <span key={bg} className={`inline-flex items-center gap-0.5 text-[8px] font-bold px-1.5 py-0.5 rounded ${
-                                      dirStockFilter === bg ? 'bg-rose-100 text-[#d04200] ring-1 ring-rose-400' : 'bg-slate-100 text-slate-600'
-                                    }`}>
-                                      <span className="font-black text-[#d04200]">{bg}</span>:{cnt}
-                                    </span>
-                                  )
-                                })}
-                              </div>
-
-                              {/* Stock Summary */}
-                              <div className="mt-3 pt-3 border-t border-hairline flex justify-between items-center text-xs font-sans">
-                                <span className="text-body font-medium">Available Supply:</span>
-                                <span className="font-mono font-bold text-ink">{totalUnits} Units</span>
+                              {/* Stock Badges Rail */}
+                              <div className="pt-2.5 border-t border-hairline">
+                                <div className="flex justify-between items-center text-xs mb-1.5">
+                                  <span className="text-[11px] text-muted font-medium">Available Stock</span>
+                                  <span className="text-xs font-black font-mono text-ink">{totalUnits} Units</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 max-h-[52px] overflow-hidden">
+                                  {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(bg => {
+                                    const cnt = bank.stockSummary?.[bg] || 0;
+                                    if (cnt <= 0) return null;
+                                    const isFiltered = dirStockFilter === bg;
+                                    return (
+                                      <span
+                                        key={bg}
+                                        className={`inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-md border transition ${
+                                          isFiltered
+                                            ? 'bg-[#f54e00] text-white border-[#f54e00]'
+                                            : 'bg-canvas border-hairline text-ink'
+                                        }`}
+                                      >
+                                        <span className="font-bold">{bg}</span>
+                                        <span className={isFiltered ? 'text-white/80' : 'text-muted'}>({cnt})</span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             </div>
 
                             {/* Footer Actions */}
-                            <div className="mt-4 flex gap-2">
+                            <div className="mt-4 pt-3 border-t border-hairline/60 flex items-center gap-2">
                               <button 
-                                onClick={(e) => { e.stopPropagation(); handleOpenBankDetail(bank) }}
-                                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg tracking-wider uppercase transition font-sans"
+                                onClick={(e) => { e.stopPropagation(); handleOpenBankDetail(bank); }}
+                                className="flex-1 h-9 flex items-center justify-center bg-canvas hover:bg-slate-100 dark:hover:bg-slate-800 text-ink border border-hairline font-bold text-xs rounded-xl uppercase tracking-wide transition leading-none text-center"
                               >
-                                View Details
+                                <span>View Details</span>
                               </button>
                               <button 
                                 onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleOpenRequest(bank)
+                                  e.stopPropagation();
+                                  handleOpenRequest(bank);
                                 }}
-                                className="flex-1 py-2 bg-[#f54e00] hover:bg-[#d04200] text-white font-semibold text-xs rounded-lg tracking-wider uppercase transition shadow-none font-sans"
+                                className="flex-1 h-9 flex items-center justify-center bg-[#f54e00] hover:bg-[#d04200] active:scale-95 text-white font-bold text-xs rounded-xl uppercase tracking-wide transition shadow-sm hover:shadow leading-none text-center"
                               >
-                                Quick Order
+                                <span>Quick Order</span>
                               </button>
                             </div>
                           </div>
