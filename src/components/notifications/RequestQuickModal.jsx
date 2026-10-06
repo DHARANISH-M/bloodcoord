@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { dataApi } from '../../utils/api'
+import Loader from '../Loader'
 
 export default function RequestQuickModal({
   requestId,
@@ -130,9 +131,9 @@ export default function RequestQuickModal({
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800 font-sans">
           {loading ? (
-            <div className="p-12 text-center text-muted space-y-3">
-              <div className="w-8 h-8 border-3 border-[#f54e00] border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="text-xs font-bold">Loading live requisition telemetry...</p>
+            <div className="p-12 text-center text-muted space-y-3 flex flex-col items-center justify-center">
+              <Loader size={60} />
+              <p className="text-xs font-bold text-ink mt-2">Loading live requisition telemetry...</p>
             </div>
           ) : !request ? (
             <div className="p-12 text-center text-muted space-y-2">

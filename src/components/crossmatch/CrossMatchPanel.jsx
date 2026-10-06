@@ -12,6 +12,7 @@ import MatchDetailsModal from './MatchDetailsModal';
 import CrossMatchMap from './CrossMatchMap';
 import DonorMatchCard from './DonorMatchCard';
 import CompatibilityDisclaimer from './CompatibilityDisclaimer';
+import Loader from '../Loader';
 
 export default function CrossMatchPanel({ onOrderDispatched, defaultBloodGroup = 'A+' }) {
   const { user } = useAuth();
@@ -113,7 +114,7 @@ export default function CrossMatchPanel({ onOrderDispatched, defaultBloodGroup =
   };
 
   return (
-    <div className="space-y-6 text-left">
+    <div className="h-full min-h-0 flex flex-col text-left">
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-5 right-5 z-50 px-5 py-3.5 rounded-xl shadow-lg text-xs font-bold tracking-wider flex items-center gap-2 animate-bounce ${
@@ -134,10 +135,10 @@ export default function CrossMatchPanel({ onOrderDispatched, defaultBloodGroup =
       )}
 
       {/* Main Grid: Left Control Console, Right Results View */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:items-stretch lg:h-full">
 
         {/* LEFT COLUMN: CROSS-MATCH PARAMETERS FORM */}
-        <div className="lg:col-span-5 bg-surface-card border border-hairline p-6 rounded-3xl shadow-sm space-y-6 sticky top-4">
+        <div className="lg:col-span-5 bg-surface-card border border-hairline p-6 rounded-3xl shadow-sm space-y-6 lg:h-full lg:overflow-y-auto overscroll-contain custom-scrollbar">
           <div className="border-b border-hairline/60 pb-4">
             <div className="flex items-center gap-2">
               <span className="text-2xl">🔬</span>
@@ -234,10 +235,10 @@ export default function CrossMatchPanel({ onOrderDispatched, defaultBloodGroup =
         </div>
 
         {/* RIGHT COLUMN: CROSS-MATCH RESULTS & SPATIAL MAP */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 lg:h-full lg:overflow-y-auto overscroll-contain custom-scrollbar pr-1.5">
 
           {/* Sub-Nav View Switcher */}
-          <div className="flex justify-between items-center bg-surface-card border border-hairline p-2 rounded-2xl">
+          <div className="flex justify-between items-center bg-surface-card/95 backdrop-blur border border-hairline p-2 rounded-2xl sticky top-0 z-10 shadow-sm">
             <div className="flex gap-1">
               <button
                 type="button"
@@ -298,9 +299,9 @@ export default function CrossMatchPanel({ onOrderDispatched, defaultBloodGroup =
           {activeTab === 'banks' && (
             <div className="space-y-4">
               {loading && (
-                <div className="p-12 text-center text-muted bg-surface-card border border-hairline rounded-3xl space-y-3">
-                  <div className="w-10 h-10 border-4 border-[#f54e00] border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <div className="text-xs font-bold uppercase tracking-wider">
+                <div className="p-12 text-center text-muted bg-surface-card border border-hairline rounded-3xl space-y-3 flex flex-col items-center justify-center">
+                  <Loader size={70} />
+                  <div className="text-xs font-bold uppercase tracking-wider text-ink mt-2">
                     Querying PostGIS & FEFO Compatible Inventories...
                   </div>
                 </div>
