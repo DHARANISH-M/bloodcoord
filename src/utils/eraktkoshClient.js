@@ -62,6 +62,13 @@ export const DISTRICT_COORDS = {
   'Mysore': { lat: 12.2958, lng: 76.6394 },
   'Chennai': { lat: 13.0827, lng: 80.2707 },
   'Coimbatore': { lat: 11.0168, lng: 76.9558 },
+  'Erode': { lat: 11.3410, lng: 77.7172 },
+  'Sathyamangalam': { lat: 11.5034, lng: 77.2444 },
+  'Gobichettipalayam': { lat: 11.4552, lng: 77.4422 },
+  'Perundurai': { lat: 11.2785, lng: 77.5830 },
+  'Bhavani': { lat: 11.4485, lng: 77.6826 },
+  'Tiruppur': { lat: 11.1085, lng: 77.3411 },
+  'Salem': { lat: 11.6643, lng: 78.1460 },
   'Madurai': { lat: 9.9252, lng: 78.1198 },
   'Hyderabad': { lat: 17.3850, lng: 78.4867 },
   'Rangareddy': { lat: 17.4399, lng: 78.4983 },
@@ -289,12 +296,19 @@ export function parseBloodBankRow(row, stateObj) {
 
 export async function fetchStateEraktkosh(stateCode, retries = 2) {
   const stateObj = ERAKTKOSH_STATES.find(s => s.code === stateCode.toString()) || ERAKTKOSH_STATES[0];
-  const url = `https://eraktkosh.mohfw.gov.in/BLDAHIMS/bloodbank/nearbyBB.cnt?hmode=GETNEARBYSTOCKDETAILS&stateCode=${stateObj.code}&districtCode=-1&bloodGroup=all&bloodComponent=11&lang=0`;
+  const directUrl = `https://eraktkosh.mohfw.gov.in/BLDAHIMS/bloodbank/nearbyBB.cnt?hmode=GETNEARBYSTOCKDETAILS&stateCode=${stateObj.code}&districtCode=-1&bloodGroup=all&bloodComponent=11&lang=0`;
+  
+  // Try direct, then reliable CORS proxies if in browser
+  const targetUrls = [
+    directUrl,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(directUrl)}`
+  ];
 
-  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+  for (const url of targetUrls) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch(url, {
         headers: {
           'Accept': 'application/json, text/plain, */*'
@@ -303,19 +317,48 @@ export async function fetchStateEraktkosh(stateCode, retries = 2) {
       });
       clearTimeout(timeoutId);
 
-      const text = await res.text();
-      const json = safeJsonParse(text);
-      const rawRows = json.data || [];
-
-      return rawRows.map(row => parseBloodBankRow(row, stateObj)).filter(Boolean);
-    } catch (e) {
-      if (attempt <= retries) {
-        await new Promise(r => setTimeout(r, 1500));
-      } else {
-        console.warn(`[${stateObj.name}] e-RaktKosh fetch notice: ${e.message}`);
-        return [];
+      if (res.ok) {
+        const text = await res.text();
+        const json = safeJsonParse(text);
+        const rawRows = json.data || [];
+        if (rawRows.length > 0) {
+          return rawRows.map(row => parseBloodBankRow(row, stateObj)).filter(Boolean);
+        }
       }
+    } catch (_) {
+      // Try next url / proxy
     }
   }
+
   return [];
+}
+
+// Concurrently fetch and sync all 36 states & UTs
+export async function fetchAllStatesEraktkosh(onProgress = null) {
+  const allResults = [];
+  const chunkSize = 6;
+  
+  for (let i = 0; i < ERAKTKOSH_STATES.length; i += chunkSize) {
+    const chunk = ERAKTKOSH_STATES.slice(i, i + chunkSize);
+    const chunkPromises = chunk.map(async (st) => {
+      try {
+        const banks = await fetchStateEraktkosh(st.code, 1);
+        return { state: st.name, code: st.code, banks };
+      } catch (_) {
+        return { state: st.name, code: st.code, banks: [] };
+      }
+    });
+
+    const chunkResults = await Promise.all(chunkPromises);
+    chunkResults.forEach(res => {
+      allResults.push(...res.banks);
+    });
+
+    if (onProgress) {
+      const completed = Math.min(i + chunkSize, ERAKTKOSH_STATES.length);
+      onProgress(completed, ERAKTKOSH_STATES.length, allResults.length);
+    }
+  }
+
+  return allResults;
 }

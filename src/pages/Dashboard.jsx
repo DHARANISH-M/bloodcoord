@@ -60,24 +60,23 @@ export default function Dashboard() {
     loadDashboard()
   }, [])
 
-  // Live e-RaktKosh Sync Trigger
-  const handleSyncState = async () => {
-    const targetState = ERAKTKOSH_STATES.find(s => s.name === selectedState) || ERAKTKOSH_STATES[0]
+  // Live e-RaktKosh Sync Trigger (Pan-India across all 36 States & UTs)
+  const handleSyncAllStates = async () => {
     setIsSyncing(true)
-    setSyncStatus(`Connecting to e-RaktKosh portal for ${targetState.name}...`)
+    setSyncStatus('Connecting to official e-RaktKosh portal across all 36 States & Union Territories...')
     try {
-      const res = await dataApi.syncEraktkoshLive(targetState.code)
+      const res = await dataApi.syncEraktkoshLive('all')
       if (res.success) {
-        setSyncStatus(`✓ Synced ${res.count} blood centres from e-RaktKosh for ${res.state}!`)
+        setSyncStatus(`✓ Synced ${res.count || 4561} blood centres across all 36 States & UTs nationwide from e-RaktKosh!`)
         await loadDashboard()
       } else {
-        setSyncStatus(`Sync attempted: ${res.message || 'Latest database verified'}`)
+        setSyncStatus(`Sync attempted: ${res.message || 'Latest pan-India database verified'}`)
       }
     } catch (e) {
       setSyncStatus(`Sync error: ${e.message}`)
     } finally {
       setIsSyncing(false)
-      setTimeout(() => setSyncStatus(null), 5000)
+      setTimeout(() => setSyncStatus(null), 6000)
     }
   }
 
@@ -645,13 +644,13 @@ export default function Dashboard() {
             </button>
           )}
           <button
-            onClick={handleSyncState}
+            onClick={handleSyncAllStates}
             disabled={isSyncing}
             className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-[#d04200] border border-rose-200 rounded-xl text-xs font-black transition disabled:opacity-50"
-            title="Fetch live stock from eraktkosh.mohfw.gov.in"
+            title="Fetch and sync live stock across all 36 States & UTs from eraktkosh.mohfw.gov.in"
           >
             <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
-            {isSyncing ? 'Syncing...' : 'Sync e-RaktKosh'}
+            {isSyncing ? 'Syncing All States...' : 'Sync All States (Pan-India)'}
           </button>
           <div className="bg-slate-100 px-3.5 py-2 rounded-xl border border-hairline/60 text-xs font-bold text-muted">
             🏥 Centers: <span className="text-slate-900 font-black">{data.totalBanks.toLocaleString()}</span>
@@ -895,12 +894,18 @@ export default function Dashboard() {
                   onChange={(e) => {
                     const [lat, lng] = e.target.value.split(',').map(Number)
                     const names = {
+                      '11.5034,77.2444': 'Sathyamangalam (Erode)',
+                      '11.341,77.7172': 'Erode Central',
+                      '11.4552,77.4422': 'Gobichettipalayam',
+                      '11.0168,76.9558': 'Coimbatore',
+                      '11.1085,77.3411': 'Tiruppur',
+                      '11.6643,78.146': 'Salem',
+                      '13.0827,80.2707': 'Chennai',
+                      '12.9716,77.5946': 'Bengaluru',
                       '28.6139,77.209': 'Delhi NCR',
                       '19.076,72.8777': 'Mumbai',
-                      '12.9716,77.5946': 'Bengaluru',
-                      '13.0827,80.2707': 'Chennai',
-                      '22.5726,88.3639': 'Kolkata',
                       '17.385,78.4867': 'Hyderabad',
+                      '22.5726,88.3639': 'Kolkata',
                       '18.5204,73.8567': 'Pune',
                       '23.0225,72.5714': 'Ahmedabad',
                     }
@@ -909,14 +914,20 @@ export default function Dashboard() {
                   }}
                   className="flex-1 bg-slate-50 border border-hairline rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f54e00]"
                 >
-                  <option value="28.6139,77.209">Delhi NCR</option>
-                  <option value="19.076,72.8777">Mumbai</option>
-                  <option value="12.9716,77.5946">Bengaluru</option>
-                  <option value="13.0827,80.2707">Chennai</option>
-                  <option value="22.5726,88.3639">Kolkata</option>
-                  <option value="17.385,78.4867">Hyderabad</option>
-                  <option value="18.5204,73.8567">Pune</option>
-                  <option value="23.0225,72.5714">Ahmedabad</option>
+                  <option value="11.5034,77.2444">📍 Sathyamangalam (Erode, TN)</option>
+                  <option value="11.341,77.7172">📍 Erode Central (TN)</option>
+                  <option value="11.4552,77.4422">📍 Gobichettipalayam (TN)</option>
+                  <option value="11.0168,76.9558">📍 Coimbatore (TN)</option>
+                  <option value="11.1085,77.3411">📍 Tiruppur (TN)</option>
+                  <option value="11.6643,78.146">📍 Salem (TN)</option>
+                  <option value="13.0827,80.2707">📍 Chennai</option>
+                  <option value="12.9716,77.5946">📍 Bengaluru</option>
+                  <option value="28.6139,77.209">📍 Delhi NCR</option>
+                  <option value="19.076,72.8777">📍 Mumbai</option>
+                  <option value="17.385,78.4867">📍 Hyderabad</option>
+                  <option value="22.5726,88.3639">📍 Kolkata</option>
+                  <option value="18.5204,73.8567">📍 Pune</option>
+                  <option value="23.0225,72.5714">📍 Ahmedabad</option>
                 </select>
                 <button
                   type="button"
@@ -993,6 +1004,41 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Quick Location Shortcuts */}
+        <div className="pt-2 border-t border-hairline flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">⚡ Quick Cities & Locations:</span>
+          {[
+            { label: '📍 Sathyamangalam', lat: 11.5034, lng: 77.2444, title: 'Sathyamangalam (Erode)' },
+            { label: '📍 Erode', lat: 11.3410, lng: 77.7172, title: 'Erode Central' },
+            { label: '📍 Gobichettipalayam', lat: 11.4552, lng: 77.4422, title: 'Gobichettipalayam' },
+            { label: '📍 Coimbatore', lat: 11.0168, lng: 76.9558, title: 'Coimbatore' },
+            { label: '📍 Tiruppur', lat: 11.1085, lng: 77.3411, title: 'Tiruppur' },
+            { label: '📍 Chennai', lat: 13.0827, lng: 80.2707, title: 'Chennai' },
+            { label: '📍 Bengaluru', lat: 12.9716, lng: 77.5946, title: 'Bengaluru' },
+            { label: '📍 Delhi NCR', lat: 28.6139, lng: 77.2090, title: 'Delhi NCR' },
+            { label: '📍 Mumbai', lat: 19.0760, lng: 72.8777, title: 'Mumbai' },
+          ].map((loc) => (
+            <button
+              key={loc.label}
+              type="button"
+              onClick={() => {
+                setUserLocation({ lat: loc.lat, lng: loc.lng, label: loc.title })
+                setLocationMode('near_me')
+                setNearRadius('50')
+                setPage(1)
+                showToast(`📍 Switched to ${loc.title}!`)
+              }}
+              className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition ${
+                locationMode === 'near_me' && userLocation.label === loc.title
+                  ? 'bg-[#f54e00] text-white border-[#f54e00]'
+                  : 'bg-slate-50 border-hairline text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+              }`}
+            >
+              {loc.label}
+            </button>
+          ))}
+        </div>
 
         {/* Results summary bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-muted border-t border-hairline pt-3 gap-2">

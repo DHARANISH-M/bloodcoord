@@ -4,10 +4,13 @@ import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/AuthLayout'
 
 const LOCATION_PRESETS = [
+  { label: 'Sathyamangalam (Erode)', address: 'Mysore Trunk Road, Sathyamangalam, Erode, Tamil Nadu 638401', district: 'Erode', lat: 11.5034, lng: 77.2444 },
+  { label: 'Erode (Central)', address: 'EVN Road, Erode, Tamil Nadu 638009', district: 'Erode', lat: 11.3410, lng: 77.7172 },
+  { label: 'Coimbatore (Central)', address: 'Trichy Road, Coimbatore, Tamil Nadu 641018', district: 'Coimbatore', lat: 11.0168, lng: 76.9558 },
+  { label: 'Chennai (Central)', address: 'EVR Periyar Salai, Chennai, Tamil Nadu 600003', district: 'Chennai', lat: 13.0827, lng: 80.2707 },
+  { label: 'Bengaluru (Central)', address: 'MG Road, Bengaluru, Karnataka 560001', district: 'Bangalore Urban', lat: 12.9716, lng: 77.5946 },
   { label: 'Delhi NCR (Central)', address: 'Connaught Place, New Delhi, Delhi 110001', district: 'New Delhi', lat: 28.6304, lng: 77.2177 },
   { label: 'Mumbai (South)', address: 'Acharya Donde Marg, Parel, Mumbai, Maharashtra 400012', district: 'Mumbai', lat: 19.0028, lng: 72.8428 },
-  { label: 'Bengaluru (Central)', address: 'MG Road, Bengaluru, Karnataka 560001', district: 'Bangalore Urban', lat: 12.9716, lng: 77.5946 },
-  { label: 'Chennai (Central)', address: 'EVR Periyar Salai, Chennai, Tamil Nadu 600003', district: 'Chennai', lat: 13.0827, lng: 80.2707 },
   { label: 'Kolkata (Salt Lake)', address: 'Sector V, Salt Lake, Kolkata, West Bengal 700091', district: 'Kolkata', lat: 22.5726, lng: 88.3639 },
   { label: 'Hyderabad (Banjara)', address: 'Road No 2, Banjara Hills, Hyderabad, Telangana 500034', district: 'Hyderabad', lat: 17.4156, lng: 78.4357 },
 ]

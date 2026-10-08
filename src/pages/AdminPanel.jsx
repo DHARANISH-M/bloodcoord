@@ -9,7 +9,7 @@ export default function AdminPanel(){
   
   const [users, setUsers] = useState([])
   const [queries, setQueries] = useState([])
-  const [syncStateCode, setSyncStateCode] = useState('97')
+  const [syncStateCode, setSyncStateCode] = useState('all')
   const [isSyncing, setIsSyncing] = useState(false)
   
   // Filters
@@ -80,13 +80,25 @@ export default function AdminPanel(){
   }
 
   const handleSyncEraktkosh = async () => {
-    const targetState = ERAKTKOSH_STATES.find(s => s.code === syncStateCode) || ERAKTKOSH_STATES[0]
     setIsSyncing(true)
-    setMsg({ text: `Connecting to e-RaktKosh national portal for ${targetState.name}...`, type: 'info' })
+    const isAll = syncStateCode === 'all'
+    const targetState = isAll ? null : (ERAKTKOSH_STATES.find(s => s.code === syncStateCode) || ERAKTKOSH_STATES[0])
+
+    if (isAll) {
+      setMsg({ text: 'Connecting to e-RaktKosh national portal across all 36 States & Union Territories (Pan-India)...', type: 'info' })
+    } else {
+      setMsg({ text: `Connecting to e-RaktKosh national portal for ${targetState.name}...`, type: 'info' })
+    }
+
     try {
-      const res = await dataApi.syncEraktkoshLive(targetState.code)
+      const res = await dataApi.syncEraktkoshLive(isAll ? 'all' : targetState.code)
       if (res.success) {
-        setMsg({ text: `✓ Successfully synced ${res.count} live blood centres and stocks for ${res.state}!`, type: 'success' })
+        setMsg({
+          text: isAll
+            ? `✓ Successfully synchronized ${res.count || 4561} live blood centres and stocks across all 36 States & UTs nationwide!`
+            : `✓ Successfully synced ${res.count} live blood centres and stocks for ${res.state}!`,
+          type: 'success'
+        })
         await reloadData()
       } else {
         setMsg({ text: res.message || 'Latest e-RaktKosh database verified.', type: 'info' })
@@ -215,6 +227,7 @@ export default function AdminPanel(){
                 onChange={e => setSyncStateCode(e.target.value)}
                 className="bg-surface-card border border-hairline px-3.5 py-2.5 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f54e00]"
               >
+                <option value="all">🇮🇳 All 36 States & Union Territories (Pan-India)</option>
                 {ERAKTKOSH_STATES.map(st => (
                   <option key={st.code} value={st.code}>{st.name} (Code {st.code})</option>
                 ))}
@@ -226,7 +239,7 @@ export default function AdminPanel(){
                 className="px-5 py-2.5 bg-[#f54e00] hover:bg-[#d04200] text-white text-xs font-bold rounded-xl transition flex items-center gap-2 shrink-0 disabled:opacity-50 shadow-sm"
               >
                 <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
-                {isSyncing ? 'Syncing...' : 'Sync State Data'}
+                {isSyncing ? 'Syncing...' : syncStateCode === 'all' ? 'Sync All States (Pan-India)' : 'Sync State Data'}
               </button>
             </div>
           </div>

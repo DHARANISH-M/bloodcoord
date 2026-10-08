@@ -27,7 +27,9 @@ export default function Navbar(){
     }
     fetchNotifs()
 
-    const handleNewNotif = () => {
+    const handleNewNotif = (e) => {
+      const notif = e?.detail
+      if (user && notif && notif.user_id && notif.user_id !== user.id) return
       fetchNotifs()
     }
     window.addEventListener('new_notification', handleNewNotif)
@@ -169,7 +171,9 @@ export default function Navbar(){
                         ) : (
                           notifications.map((notif) => {
                             const isEmergency = notif.type === 'emergency_request' || notif.metadata?.urgency === 'emergency'
-                            const isUpdate = notif.type === 'request_response'
+                            const isAccepted = notif.metadata?.status === 'accepted' || notif.type === 'request_response' || (notif.title || '').toLowerCase().includes('accepted')
+                            const isReserved = notif.metadata?.status === 'reserved' || (notif.title || '').toLowerCase().includes('reserved')
+                            const isDispatched = notif.metadata?.status === 'dispatched' || (notif.title || '').toLowerCase().includes('dispatched')
                             const bg = notif.metadata?.bloodGroup
 
                             return (
@@ -177,21 +181,37 @@ export default function Navbar(){
                                 key={notif.id} 
                                 onClick={() => handleNotificationClick(notif)}
                                 className={`p-4 hover:bg-slate-50 cursor-pointer transition flex flex-col space-y-2 text-left group ${
-                                  !notif.read_flag ? 'bg-rose-50/40 border-l-4 border-[#f54e00]' : ''
+                                  !notif.read_flag 
+                                    ? isAccepted
+                                      ? 'bg-emerald-50/60 border-l-4 border-emerald-500'
+                                      : isReserved
+                                      ? 'bg-blue-50/60 border-l-4 border-blue-500'
+                                      : isDispatched
+                                      ? 'bg-purple-50/60 border-l-4 border-purple-500'
+                                      : 'bg-rose-50/50 border-l-4 border-[#f54e00]' 
+                                    : isAccepted
+                                    ? 'border-l-4 border-emerald-400/60 hover:bg-emerald-50/20'
+                                    : isReserved
+                                    ? 'border-l-4 border-blue-400/60 hover:bg-blue-50/20'
+                                    : ''
                                 }`}
                               >
                                 <div className="flex justify-between items-start gap-2">
                                   <div className="flex items-center gap-1.5">
                                     <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
-                                      isEmergency 
-                                        ? 'bg-rose-100 text-rose-800 font-bold' 
-                                        : isUpdate 
-                                        ? 'bg-emerald-100 text-emerald-800 font-bold' 
+                                      isAccepted
+                                        ? 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-200'
+                                        : isReserved
+                                        ? 'bg-blue-100 text-blue-800 font-bold border border-blue-200'
+                                        : isDispatched
+                                        ? 'bg-purple-100 text-purple-800 font-bold border border-purple-200'
+                                        : isEmergency 
+                                        ? 'bg-rose-100 text-rose-800 font-bold border border-rose-200' 
                                         : notif.type === 'expiry_alert'
-                                        ? 'bg-amber-100 text-amber-800 font-bold'
-                                        : 'bg-blue-100 text-blue-800 font-bold'
+                                        ? 'bg-amber-100 text-amber-800 font-bold border border-amber-200'
+                                        : 'bg-slate-200 text-slate-700 font-bold'
                                     }`}>
-                                      {notif.type?.replace('_', ' ')}
+                                      {isAccepted ? '✓ ACCEPTED' : isReserved ? '🔒 RESERVED' : isDispatched ? '🚑 IN TRANSIT' : notif.type?.replace('_', ' ')}
                                     </span>
                                     {bg && (
                                       <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-900 text-white font-mono">
@@ -204,7 +224,7 @@ export default function Navbar(){
                                   </span>
                                 </div>
 
-                                <div className="text-xs font-bold text-slate-900 group-hover:text-[#d04200] transition">
+                                <div className="text-xs font-bold text-slate-900 group-hover:text-[#d04200] transition leading-snug">
                                   {notif.title || notif.message}
                                 </div>
 

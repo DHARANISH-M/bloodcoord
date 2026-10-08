@@ -42,6 +42,7 @@ export default function Sidebar({
     if (role === 'donor') {
       return [
         { id: 'requests', label: 'Incoming Invites', emoji: '✉️' },
+        { id: 'notifications', label: 'Alerts Center', emoji: '🔔', badge: unreadNotifCount },
         { id: 'raise', label: 'Support Tickets', emoji: '📝' },
         { id: 'profile', label: 'My Availability', emoji: '⚙️' }
       ]

@@ -145,12 +145,14 @@ export default function Landing(){
           </div>
 
           <div className="border-t border-hairline pt-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
+                { label: '📍 Blood Bank ( Dhanvantri Sathyamangalam )', email: 'dctsathy11@gmail.com', pass: 'bank123', desc: 'e-RaktKosh live centre in Sathyamangalam, Erode', color: 'hover:border-rose-300' },
+                { label: '🏥 Hospital ( GH Sathyamangalam )', email: 'gh.sathy@blood.org', pass: 'hosp123', desc: 'Local GH requisitioning & emergency blood supply', color: 'hover:border-rose-300' },
+                { label: '🩸 Blood Bank ( GH Gobichettipalayam )', email: 'bbghgobi@gmail.com', pass: 'bank123', desc: 'Nearby Government Hospital Blood Centre', color: 'hover:border-rose-300' },
                 { label: 'Admin ( National Portal )', email: 'admin@eraktkosh.gov.in', pass: 'admin123', desc: 'Approve centres, audit inventory', color: 'hover:border-rose-300' },
-                { label: 'Blood Bank ( Indian Red Cross )', email: 'redcross@blood.org', pass: 'bank123', desc: 'Manage stock, dispatch units', color: 'hover:border-rose-300' },
+                { label: 'Blood Bank ( Indian Red Cross HQ )', email: 'redcross@blood.org', pass: 'bank123', desc: 'Manage stock, dispatch units', color: 'hover:border-rose-300' },
                 { label: 'Hospital ( AIIMS New Delhi )', email: 'aiims.delhi@blood.org', pass: 'hosp123', desc: 'Geo-search stock, emergency SOS', color: 'hover:border-rose-300' },
-                { label: 'Donor ( Rahul Sharma • O- )', email: 'rahul.sharma@gmail.com', pass: 'donor123', desc: 'Accept SOS invites, toggle status', color: 'hover:border-rose-300' },
               ].map((p, idx) => (
                 <Link
                   key={idx}

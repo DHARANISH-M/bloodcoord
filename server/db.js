@@ -23,37 +23,54 @@ function getPort() {
 }
 
 function buildSslConfig() {
-  const sslMode = process.env.PGSSLMODE || process.env.DB_SSLMODE || 'verify-full';
-  if (sslMode === 'disable') return false;
+  const sslMode = process.env.PGSSLMODE || process.env.DB_SSLMODE;
+  if (sslMode === 'disable' || sslMode === 'false' || sslMode === 'off') return false;
+
+  const host = process.env.PGHOST || '';
+  const isLocal = !process.env.DATABASE_URL && (!host || host === 'localhost' || host === '127.0.0.1');
+  if (isLocal && !sslMode) return false;
 
   const certPath = process.env.PGSSLROOTCERT || process.env.DB_SSLROOTCERT;
   if (!certPath) {
-    return { rejectUnauthorized: sslMode !== 'no-verify' };
+    if (sslMode === 'no-verify' || sslMode === 'prefer') {
+      return { rejectUnauthorized: false };
+    }
+    return sslMode ? { rejectUnauthorized: sslMode !== 'no-verify' } : false;
   }
 
-  return {
-    ca: fs.readFileSync(resolveFromRoot(certPath), 'utf8'),
-    rejectUnauthorized: sslMode !== 'no-verify',
-  };
+  try {
+    return {
+      ca: fs.readFileSync(resolveFromRoot(certPath), 'utf8'),
+      rejectUnauthorized: sslMode !== 'no-verify',
+    };
+  } catch (err) {
+    console.warn('Could not read SSL CA cert:', err.message);
+    return false;
+  }
 }
 
 const baseConfig = process.env.DATABASE_URL
   ? { connectionString: process.env.DATABASE_URL }
   : {
-      host: process.env.PGHOST,
+      host: process.env.PGHOST || 'localhost',
       port: getPort(),
       database: process.env.PGDATABASE || 'postgres',
       user: process.env.PGUSER || 'postgres',
-      password: process.env.PGPASSWORD,
+      password: process.env.PGPASSWORD || '',
     };
 
 export const pool = new Pool({
   ...baseConfig,
   ssl: buildSslConfig(),
   max: Number(process.env.PGPOOL_MAX || 10),
+  connectionTimeoutMillis: 3000,
 });
 
 export async function checkDatabase() {
-  const { rows } = await pool.query('select now() as now');
-  return rows[0];
+  try {
+    const { rows } = await pool.query('select now() as now');
+    return { ok: true, now: rows[0]?.now };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
 }

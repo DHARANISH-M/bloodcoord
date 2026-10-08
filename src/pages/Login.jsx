@@ -4,10 +4,14 @@ import { useAuth } from '../context/AuthContext'
 import AuthLayout from '../components/AuthLayout'
 
 const DEMO_ACCOUNTS = [
+  { role: 'Blood Bank', name: 'Dhanvantri Blood Bank (Sathyamangalam)', email: 'dctsathy11@gmail.com', pass: 'bank123', icon: '📍' },
+  { role: 'Hospital', name: 'GH Sathyamangalam Hospital', email: 'gh.sathy@blood.org', pass: 'hosp123', icon: '🏥' },
+  { role: 'Blood Bank', name: 'GH Gobichettipalayam Centre', email: 'bbghgobi@gmail.com', pass: 'bank123', icon: '🩸' },
+  { role: 'Hospital', name: 'Bannari Amman Health Centre (Sathy)', email: 'healthcentre.bitsathy@blood.org', pass: 'hosp123', icon: '🏥' },
+  { role: 'Donor', name: 'Karthik Selvan (O+ Sathyamangalam)', email: 'karthik.sathy@gmail.com', pass: 'donor123', icon: '👤' },
   { role: 'Admin', name: 'National eRaktKosh Admin', email: 'admin@eraktkosh.gov.in', pass: 'admin123', icon: '⚡' },
   { role: 'Blood Bank', name: 'Indian Red Cross HQ', email: 'redcross@blood.org', pass: 'bank123', icon: '🩸' },
   { role: 'Hospital', name: 'AIIMS New Delhi', email: 'aiims.delhi@blood.org', pass: 'hosp123', icon: '🏥' },
-  { role: 'Donor', name: 'Rahul Sharma (O-)', email: 'rahul.sharma@gmail.com', pass: 'donor123', icon: '👤' },
 ]
 
 export default function Login(){

@@ -134,8 +134,20 @@ app.patch('/api/donation-offers/:offerId/status', route(async (req) => {
 app.post('/api/blood-requests/public', route(async (req) => {
   return domain.createPublicBloodRequest(req.body);
 }));
+app.post('/api/broadcast/sos', route(async (req) => {
+  return domain.broadcastEmergencySos(req.body);
+}));
+app.post('/api/emergency/sos', route(async (req) => {
+  return domain.broadcastEmergencySos(req.body);
+}));
 app.patch('/api/blood-requests/:requestId/status', route(async (req) => {
-  return domain.updateBloodRequestStatus(req.params.requestId, req.body.status);
+  return domain.updateBloodRequestStatus(req.params.requestId, req.body.status, req.body.updatedByRole);
+}));
+app.post('/api/blood-requests/:requestId/reserve', route(async (req) => {
+  return domain.reserveBloodRequest(req.params.requestId);
+}));
+app.post('/api/blood-requests/:requestId/issue', route(async (req) => {
+  return domain.issueBloodRequest(req.params.requestId);
 }));
 app.get('/api/requests/:requestId', route(async (req) => {
   return domain.getRequestDetail(req.params.requestId);

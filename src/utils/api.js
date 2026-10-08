@@ -156,14 +156,29 @@ export const dataApi = {
     return request({ method: 'get', url: `/api/blood-banks/${bankProfileId}/requests` });
   },
 
-  updateBloodRequestStatus(requestId, status) {
-    if (USE_MOCK) return Promise.resolve(mockApi.updateRequestStatus(requestId, status));
-    return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status } });
+  updateBloodRequestStatus(requestId, status, updatedByRole = null) {
+    if (USE_MOCK) return Promise.resolve(mockApi.updateRequestStatus(requestId, status, updatedByRole));
+    return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status, updatedByRole } });
   },
 
-  updateRequestStatus(requestId, status) {
-    if (USE_MOCK) return Promise.resolve(mockApi.updateRequestStatus(requestId, status));
-    return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status } });
+  updateRequestStatus(requestId, status, updatedByRole = null) {
+    if (USE_MOCK) return Promise.resolve(mockApi.updateRequestStatus(requestId, status, updatedByRole));
+    return request({ method: 'patch', url: `/api/blood-requests/${requestId}/status`, data: { status, updatedByRole } });
+  },
+
+  reserveBloodRequest(requestId) {
+    if (USE_MOCK) return Promise.resolve(mockApi.reserveBloodRequest(requestId));
+    return request({ method: 'post', url: `/api/blood-requests/${requestId}/reserve` });
+  },
+
+  issueBloodRequest(requestId) {
+    if (USE_MOCK) return Promise.resolve(mockApi.issueBloodRequest(requestId));
+    return request({ method: 'post', url: `/api/blood-requests/${requestId}/issue` });
+  },
+
+  broadcastEmergencySos(payload) {
+    if (USE_MOCK) return Promise.resolve(mockApi.broadcastEmergencySos(payload));
+    return request({ method: 'post', url: '/api/broadcast/sos', data: payload });
   },
 
   getHospitalBloodBanks(hospitalProfileId, userId) {
@@ -248,7 +263,7 @@ export const dataApi = {
     return request({ method: 'post', url: '/api/cron/expiry-check' });
   },
 
-  syncEraktkoshLive(stateCode = '97') {
+  syncEraktkoshLive(stateCode = 'all') {
     if (USE_MOCK) return mockApi.syncEraktkoshLive(stateCode);
     return request({ method: 'post', url: '/api/eraktkosh/sync', data: { stateCode } });
   },

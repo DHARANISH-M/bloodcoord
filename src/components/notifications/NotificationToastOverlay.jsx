@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '../../context/AuthContext'
 import RequestQuickModal from './RequestQuickModal'
 
 export default function NotificationToastOverlay({ currentUserRole = 'hospital' }) {
+  const { user } = useAuth()
   const [activeToast, setActiveToast] = useState(null)
   const [selectedReqId, setSelectedReqId] = useState(null)
   const [selectedReqObj, setSelectedReqObj] = useState(null)
@@ -11,6 +13,9 @@ export default function NotificationToastOverlay({ currentUserRole = 'hospital' 
     const handleNewNotif = (e) => {
       const notif = e.detail
       if (!notif) return
+
+      // Prevent notifications meant for others or sender's own request from showing as incoming alert
+      if (user && notif.user_id && notif.user_id !== user.id) return
 
       setActiveToast(notif)
 
@@ -24,7 +29,7 @@ export default function NotificationToastOverlay({ currentUserRole = 'hospital' 
 
     window.addEventListener('new_notification', handleNewNotif)
     return () => window.removeEventListener('new_notification', handleNewNotif)
-  }, [])
+  }, [user])
 
   const handleOpenFromToast = (notif) => {
     const reqId = notif.metadata?.requestId || null

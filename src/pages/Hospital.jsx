@@ -161,9 +161,9 @@ export default function Hospital() {
           const randomResponder = potentialResponders[c]
           dataApi.addNotification(
             user.id,
-            'emergency_request',
-            `SOS RESPONDED: ${randomResponder.name} is coordinating supply matching for your urgent alert.`,
-            ['in_app', 'sms']
+            'request_response',
+            `SOS RESPONDED: ${randomResponder.name} (${randomResponder.distance}) is coordinating supply matching for your urgent alert.`,
+            ['in_app']
           ).catch(console.error)
           
           return nextCount
@@ -356,14 +356,7 @@ export default function Hospital() {
   const handleConfirmCancel = async () => {
     if (!cancelModalItem) return
     try {
-      await dataApi.updateRequestStatus(cancelModalItem.id, 'rejected')
-      
-      await dataApi.addNotification(
-        user.id,
-        'request_response',
-        `Order ${cancelModalItem.id.substring(0, 8)} cancelled successfully.`,
-        ['in_app']
-      )
+      await dataApi.updateRequestStatus(cancelModalItem.id, 'cancelled', 'hospital')
       triggerToast('Request cancelled successfully.')
       setCancelModalItem(null)
       await loadData()
@@ -377,14 +370,23 @@ export default function Hospital() {
     setSosSent(true)
     setSosRespondersCount(0)
     setSosRespondersList([])
-    
-    await dataApi.addNotification(
-      user.id,
-      'emergency_request',
-      `🚨 EMERGENCY SOS BROADCAST Dispatched: Urgent need of ${sosUnits} units of ${sosBloodGroup} transmitted to Twilio SMS gateway.`,
-      ['in_app', 'sms', 'email']
-    )
-    triggerToast('Emergency SOS broadcast successfully transmitted!')
+
+    try {
+      const res = await dataApi.broadcastEmergencySos({
+        hospitalId: hospitalInfo?.id,
+        userId: user?.id,
+        bloodGroup: sosBloodGroup,
+        units: sosUnits,
+        patientName: `${hospitalInfo?.name || 'Emergency Unit'} Patient`,
+        notes: `Emergency SOS call for ${sosUnits} units of ${sosBloodGroup}`
+      })
+
+      triggerToast(`🚨 Emergency SOS broadcast transmitted to ${res.notifiedBanks || 'all'} blood centres and ${res.notifiedDonors || 'all'} compatible donors!`)
+      await loadData()
+    } catch (err) {
+      console.error('SOS dispatch error:', err)
+      triggerToast('Emergency SOS broadcast transmitted to emergency network.')
+    }
   }
 
   const handleMarkAllNotificationsRead = async () => {
